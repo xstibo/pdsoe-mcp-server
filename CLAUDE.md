@@ -311,7 +311,17 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
 - [x] Cut a `v1.0.0` GitHub Release with the exported plugin JAR attached
   (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.0.0). No CLI build - the JAR is
   exported from Eclipse (Deployable plug-ins and fragments) and uploaded via `gh release create`.
-- [ ] Eclipse Preferences page for user-configurable port / bind address (see Design decisions)
+
+### Settings & configuration
+An Eclipse Preferences page (`FieldEditorPreferencePage` + `AbstractPreferenceInitializer`)
+exposing plugin settings, replacing today's hardcoded values:
+- [ ] Server port (currently `Integer.getInteger("pdsoe.mcp.port", 8123)`)
+- [ ] Bind address (loopback vs. other; a token becomes mandatory if non-loopback — see
+  Design decisions)
+- [ ] Tool filtering — enable/disable individual tools (or whole domains) the user doesn't
+  want or need; the server would skip registering the disabled ones
+- [ ] File access control — restrict which projects/paths the read/write/build tools may
+  touch (e.g. an allow/deny list on top of the existing containment checks)
 
 ### Performance
 - [ ] Offload the remaining synchronous-on-the-Jetty-thread tools to `boundedElastic` (as done
@@ -327,5 +337,6 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
 
 ### Observability
 - [ ] Surface server startup/shutdown and tool activity in a dedicated Eclipse Console
-  (`MessageConsole` + `IOConsoleOutputStream`, hooked in `Activator.start()`), alongside the
-  existing `Platform.getLog()` error entries.
+  (`MessageConsole` + `IOConsoleOutputStream`, hooked in `Activator.start()`), shifting routine
+  logging there instead of `Platform.getLog()` (which is meant for errors); a setting would
+  control verbosity / whether the console is the primary log target.
