@@ -14,7 +14,14 @@ Once installed, AI assistants can interact with your PDSOE workspace directly �
 - Java 17+
 - [Claude Code](https://claude.ai/code) or any MCP-compatible AI client
 
-## Building & installing
+## Installing the prebuilt plugin (quickest)
+
+Download the latest `com.github.xstibo.pdsoe.mcp_<version>.jar` from the
+[**Releases**](../../releases) page and drop it into your PDSOE installation's `dropins/` folder
+(delete any older copy first), then restart PDSOE. Confirm startup via **Window → Show View →
+Error Log** — you should see `PDSOE MCP Server started on http://127.0.0.1:8123/mcp (52 tools)`.
+
+## Building from source
 
 This is an Eclipse PDE project — there's no Maven/Gradle/CLI build; everything happens in Eclipse.
 
