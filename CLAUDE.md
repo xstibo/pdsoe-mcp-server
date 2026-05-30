@@ -18,7 +18,10 @@ AI assistants can interact with ABL (OpenEdge ABL) projects.
 52 MCP tools, split by domain into `ToolProvider` classes (see Architecture; the original
 monolithic `AblTools` was refactored away). Compiles clean, runs in PDSOE, and is verified
 live against PDSOE 12.8 on a large production ABL project.
-No known open bugs. Building additional features next; remaining work is under "Roadmap".
+No known open bugs. Published (MIT) at https://github.com/xstibo/pdsoe-mcp-server as a single
+clean commit (the pre-publish history is kept only on the local `main-archive-private` branch,
+never pushed, because it contained work-project IDs and a dev bearer token). Building additional
+features next; remaining work is under "Roadmap".
 
 ## Working agreement
 
@@ -304,7 +307,9 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
 ## Roadmap
 
 ### Release
-- [ ] Publish to GitHub
+- [x] Publish to GitHub (https://github.com/xstibo/pdsoe-mcp-server)
+- [ ] Cut a `v1.0.0` GitHub Release with the exported plugin JAR attached (export from Eclipse;
+  no CLI build) so users can download it without building from source
 - [ ] Eclipse Preferences page for user-configurable port / bind address (see Design decisions)
 
 ### Performance
