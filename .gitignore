@@ -1,0 +1,17 @@
+# Compiled classes
+bin/
+
+# Dev-tool credential file (local only)
+.mcp.json
+
+# Maven metadata extracted from JARs
+META-INF/maven/
+
+# Claude Code session data
+.claude/
+
+# macOS
+.DS_Store
+
+# Eclipse build artifacts
+*.class
