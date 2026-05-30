@@ -53,12 +53,9 @@ For most setups, `-s local` per ABL workspace is the right choice. Verify with `
 
 ## Security
 
-The server binds to **`127.0.0.1` (loopback) only** and uses **no authentication** — it is not reachable from the network, which is appropriate for a single-developer machine. Since the tool surface includes file read/write/delete and build operations:
+The server binds to **`127.0.0.1` (loopback) only** with **no authentication** — it is not network-reachable, which is appropriate for a single-developer machine. Because the tools can read, write, and delete files and run builds, **do not bind it to `0.0.0.0` or otherwise expose the port without first adding authentication.**
 
-- **Do not change the bind host to `0.0.0.0`** (or otherwise expose the port) without first adding authentication — that would turn the tool surface into a remote file read/write primitive.
-- Caller-supplied paths are constrained to the project (paths containing `..` segments are rejected); Eclipse *linked* resources stay reachable by their normal in-workspace path.
-- XML inputs (`.propath`, `.xref.xml`) are parsed with DOCTYPE and external entities disabled (XXE-safe).
-- The symbol-graph tools accept **absolute** `.xref.xml` paths by design (PDSOE stores xref output outside the project tree). Fine on loopback; if remote access is ever added, gate these behind a configured xref root.
+Inputs are hardened: caller paths are constrained to the project (`..` is rejected) and all XML is parsed XXE-safe (DOCTYPE/external entities disabled).
 
 ## Available tools
 
