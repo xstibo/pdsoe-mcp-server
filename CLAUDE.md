@@ -308,8 +308,9 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
 
 ### Release
 - [x] Publish to GitHub (https://github.com/xstibo/pdsoe-mcp-server)
-- [ ] Cut a `v1.0.0` GitHub Release with the exported plugin JAR attached (export from Eclipse;
-  no CLI build) so users can download it without building from source
+- [x] Cut a `v1.0.0` GitHub Release with the exported plugin JAR attached
+  (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.0.0). No CLI build - the JAR is
+  exported from Eclipse (Deployable plug-ins and fragments) and uploaded via `gh release create`.
 - [ ] Eclipse Preferences page for user-configurable port / bind address (see Design decisions)
 
 ### Performance
