@@ -58,13 +58,13 @@ This is an **Eclipse PDE** project — no Maven/Gradle/CLI build. Everything hap
 
 ## Architecture
 
-Two top-level classes in `src/com/github/xstibo/pdsoe/mcp/`, plus a `tools` subpackage holding
-the 52 tools split by domain:
+Two top-level classes in `src/com/github/xstibo/pdsoe/mcp/`, plus `tools` and `preferences`
+subpackages:
 
 | File | Role |
 |---|---|
-| `Activator.java` | OSGi `BundleActivator` — entry point. Eclipse calls `start()` at IDE startup (registered in `plugin.xml` as an `org.eclipse.ui.startup` extension). Creates and starts `McpServerManager`. |
-| `McpServerManager.java` | Wires Jetty 12 + MCP Java SDK. Binds `127.0.0.1:8123`, streamable HTTP at `/mcp`. Aggregates every `ToolProvider`'s tools (flat-map over a `List<ToolProvider>`) and registers them in one `.tools(...)` call; logs the registered count. |
+| `Activator.java` | `AbstractUIPlugin` (+ `IStartup`) — entry point. Eclipse calls `start()` at IDE startup (registered in `plugin.xml` as an `org.eclipse.ui.startup` extension). Creates `McpServerManager` and starts it **only if** the `server.enabled` preference is true. Extends `AbstractUIPlugin` (not plain `Plugin`) so the preference page gets an `IPreferenceStore` via `getPreferenceStore()`. Exposes `isServerRunning()` and `applyServerConfiguration()` for the preference page. |
+| `McpServerManager.java` | Wires Jetty 12 + MCP Java SDK. Binds `127.0.0.1` on the configured port (read from preferences at start), streamable HTTP at `/mcp`. Aggregates every `ToolProvider`'s tools (flat-map over a `List<ToolProvider>`) and registers them in one `.tools(...)` call; logs the registered count. `start()` is log-only (won't break the bundle at IDE startup); `startServer()` throws so a bind failure can be surfaced; `applyConfiguration()` reconciles the running server to the saved prefs (start/stop/restart-on-port-change). |
 
 **Tool providers** — `src/com/github/xstibo/pdsoe/mcp/tools/`:
 
@@ -75,7 +75,17 @@ the 52 tools split by domain:
 | `WorkspaceTools` (18), `ReadingTools` (6), `EditorStateTools` (7), `DiagnosticsTools` (6), `EditingTools` (7), `FileHistoryTools` (3) | The 52 tools grouped by the categories below; each calls Eclipse workspace APIs (`IProject`, `IFile`, `IMarker`, `WorkspaceJob`). |
 | `tools/symbol/` | `SymbolGraphTools` (5 tools) plus its package-private data types `RunRef`/`InvokeRef`/`XrefRecord`/`SymbolIndex`. Owns the per-project in-memory index (`SymbolGraphTools.projectIndices`, a `ConcurrentHashMap`). |
 
-**Plugin wiring**: `plugin.xml` registers `Activator` as a startup extension. `MANIFEST.MF`
+**Preferences** — `src/com/github/xstibo/pdsoe/mcp/preferences/`:
+
+| File | Role |
+|---|---|
+| `PreferenceConstants.java` | Store keys: `server.enabled`, `server.port`. |
+| `PreferenceInitializer.java` | `AbstractPreferenceInitializer` (registered via `org.eclipse.core.runtime.preferences`). Seeds defaults: `enabled=true`, `port=Integer.getInteger("pdsoe.mcp.port", 8123)` (so the old `-D` system property still sets the *default*). |
+| `McpPreferencePage.java` | `PreferencePage` (registered via `org.eclipse.ui.preferencePages`, "PDSOE MCP Server"). Hand-built layout: a "Server Configuration" group (Enable checkbox + Port field, manual range validation 1024-65535) and a "Server Status" group (read-only status label). `performOk()` persists the fields then reconciles the server on a background `Job` (off the UI thread — graceful close can block ~10s) and reports a bind failure (e.g. port in use) via the status line + an error dialog (parented to the workbench window shell so it survives Apply-and-Close). Apply / Apply-and-Close both route through `performOk()`. Plain `PreferencePage` (not `FieldEditorPreferencePage`) because field editors fight over the shared parent's grid layout, which precludes clean section groups. |
+
+**Plugin wiring**: `plugin.xml` registers `Activator` as a startup extension, the preference
+page (`org.eclipse.ui.preferencePages`), and the preference initializer
+(`org.eclipse.core.runtime.preferences`). `MANIFEST.MF`
 declares OSGi `Require-Bundle` deps (`org.eclipse.core.runtime`, `core.resources`,
 `debug.core`, `ui`, `ui.ide`, `swt`, `jface.text`, `ui.workbench.texteditor`, `search`,
 `ui.console`) and lists every JAR in `lib/` on the bundle classpath. Note: `org.eclipse.ui.ide`
@@ -262,9 +272,14 @@ driven from another machine) is solved with SSH port forwarding
 the tunnel's encryption and the remote host's auth. So neither a configurable bind address nor
 a bearer token is on the roadmap.
 
-**Settings hardcoded for now** — port is `Integer.getInteger("pdsoe.mcp.port", 8123)`. Full
-Eclipse Preferences (a `FieldEditorPreferencePage` + `AbstractPreferenceInitializer`) is the
-long-term plan for port/bind-address (see Roadmap).
+**Settings via Eclipse Preferences** — a `FieldEditorPreferencePage` +
+`AbstractPreferenceInitializer` under *Window > Preferences > PDSOE MCP Server* exposes an
+Enable toggle, the bind port, and a read-only status line (see Architecture > Preferences).
+Changes apply only on **Apply / Apply-and-Close** (`performOk()`), and the server is restarted
+live — read the port at start, reconcile on a background `Job`, surface bind failures. The
+old `-Dpdsoe.mcp.port` system property survives as the *default* port (overridden by a saved
+preference). The bind address is intentionally NOT a preference (loopback-only — see above).
+Tool filtering and file access control are the next preferences to add (see Roadmap).
 
 ### Symbol graph
 
@@ -320,8 +335,10 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
 
 ### Settings & configuration
 An Eclipse Preferences page (`FieldEditorPreferencePage` + `AbstractPreferenceInitializer`)
-exposing plugin settings, replacing today's hardcoded values:
-- [ ] Server port (currently `Integer.getInteger("pdsoe.mcp.port", 8123)`)
+under *Window > Preferences > PDSOE MCP Server* exposing plugin settings:
+- [x] Enable/disable the server (`server.enabled`, default on) with a live status line
+- [x] Server port (`server.port`; default still `Integer.getInteger("pdsoe.mcp.port", 8123)`).
+  Changes apply on Apply/Apply-and-Close via a live restart.
 - [ ] Tool filtering — enable/disable individual tools (or whole domains) the user doesn't
   want or need; the server would skip registering the disabled ones
 - [ ] File access control — restrict which projects/paths the read/write/build tools may

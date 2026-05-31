@@ -6,4 +6,14 @@
     <startup class="com.github.xstibo.pdsoe.mcp.Activator"/>
   </extension>
 
+  <extension point="org.eclipse.ui.preferencePages">
+    <page id="com.github.xstibo.pdsoe.mcp.preferences.McpPreferencePage"
+          class="com.github.xstibo.pdsoe.mcp.preferences.McpPreferencePage"
+          name="PDSOE MCP Server"/>
+  </extension>
+
+  <extension point="org.eclipse.core.runtime.preferences">
+    <initializer class="com.github.xstibo.pdsoe.mcp.preferences.PreferenceInitializer"/>
+  </extension>
+
 </plugin>

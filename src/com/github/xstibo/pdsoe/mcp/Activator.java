@@ -1,11 +1,13 @@
 package com.github.xstibo.pdsoe.mcp;
 
-import org.eclipse.core.runtime.Plugin;
+import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_ENABLED;
+
 import org.eclipse.ui.IStartup;
+import org.eclipse.ui.plugin.AbstractUIPlugin;
 import org.osgi.framework.Bundle;
 import org.osgi.framework.BundleContext;
 
-public class Activator extends Plugin implements IStartup {
+public class Activator extends AbstractUIPlugin implements IStartup {
 
     public static final String PLUGIN_ID = "com.github.xstibo.pdsoe.mcp";
     private static Activator instance;
@@ -16,7 +18,10 @@ public class Activator extends Plugin implements IStartup {
         super.start(context);
         instance = this;
         serverManager = new McpServerManager();
-        serverManager.start();
+        // Honor the Enable preference; an explicit opt-out means do not start.
+        if (getPreferenceStore().getBoolean(KEY_SERVER_ENABLED)) {
+            serverManager.start();
+        }
     }
 
     @Override
@@ -35,6 +40,20 @@ public class Activator extends Plugin implements IStartup {
 
     @Override
     public void earlyStartup() {
+    }
+
+    /**
+     * Reconcile the running server with the saved preferences. Call off the UI
+     * thread (it may block on graceful close); throws if a (re)start fails to bind.
+     */
+    public void applyServerConfiguration() throws Exception {
+        if (serverManager != null) {
+            serverManager.applyConfiguration();
+        }
+    }
+
+    public boolean isServerRunning() {
+        return serverManager != null && serverManager.isRunning();
     }
 
     public static Activator getDefault() {

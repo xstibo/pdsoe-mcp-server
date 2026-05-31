@@ -57,6 +57,16 @@ The server binds to **`127.0.0.1` (loopback) only** with **no authentication** �
 
 Inputs are hardened: caller paths are constrained to the project (`..` is rejected) and all XML is parsed XXE-safe (DOCTYPE/external entities disabled).
 
+## Settings
+
+**Window → Preferences → PDSOE MCP Server**:
+
+- **Enable HTTP MCP Server** — turn the server on or off (on by default).
+- **Port** — the loopback port the server binds (default `8123`).
+- **Server status** — shows whether the server is currently running.
+
+Changes take effect when you press **Apply** (or **Apply and Close**); the server restarts with the new settings, no IDE restart needed.
+
 ## Available tools
 
 52 tools across workspace navigation, code reading, the cross-reference symbol graph, editor state, diagnostics & build, code editing, and file history.
@@ -187,7 +197,8 @@ Working today: all 52 tools above, async/non-blocking handlers, ABL [proparse](h
 Planned:
 
 - [ ] Eclipse Preferences page for plugin settings:
-  - [ ] Configurable server port
+  - [x] Enable/disable the server, with a live status line
+  - [x] Configurable server port
   - [ ] Tool filtering — disable individual tools or whole domains you don't need
   - [ ] File access control — restrict which projects/paths the file tools may touch
 - [ ] Route routine logging to a dedicated Eclipse Console instead of the error log

@@ -1,5 +1,8 @@
 package com.github.xstibo.pdsoe.mcp;
 
+import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_ENABLED;
+import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_PORT;
+
 import com.github.xstibo.pdsoe.mcp.tools.DiagnosticsTools;
 import com.github.xstibo.pdsoe.mcp.tools.EditingTools;
 import com.github.xstibo.pdsoe.mcp.tools.EditorStateTools;
@@ -18,13 +21,12 @@ import org.eclipse.jetty.ee10.servlet.ServletContextHandler;
 import org.eclipse.jetty.ee10.servlet.ServletHolder;
 import org.eclipse.jetty.server.Server;
 import org.eclipse.jetty.server.ServerConnector;
+import org.eclipse.jface.preference.IPreferenceStore;
 
 import java.time.Duration;
 import java.util.List;
 
 public class McpServerManager {
-
-    private static final int PORT = Integer.getInteger("pdsoe.mcp.port", 8123);
 
     /** Every tool provider whose tools are exposed by the MCP server. */
     private static final List<ToolProvider> PROVIDERS = List.of(
@@ -39,46 +41,87 @@ public class McpServerManager {
     private Server jetty;
     private McpAsyncServer mcpServer;
 
+    /** The port the running server is bound on; used to detect a port change. */
+    private int boundPort = -1;
+
+    /**
+     * Start the server, swallowing and logging any failure. Used at IDE startup
+     * (Activator.start) so a bad or in-use port never breaks the bundle.
+     */
     public void start() {
         try {
-            HttpServletStreamableServerTransportProvider transport =
-                HttpServletStreamableServerTransportProvider.builder()
-                    .mcpEndpoint("/mcp")
-                    .build();
+            startServer();
+        } catch (Exception e) {
+            Platform.getLog(Activator.class).error("Failed to start MCP server", e);
+        }
+    }
 
-            AsyncToolSpecification[] tools = PROVIDERS.stream()
-                .flatMap(p -> p.tools().stream())
-                .toArray(AsyncToolSpecification[]::new);
+    /**
+     * Start the server, propagating any failure (e.g. the configured port is in
+     * use). Used by the reconcile path so the preference page can report it.
+     */
+    public void startServer() throws Exception {
+        int port = Activator.getDefault().getPreferenceStore().getInt(KEY_SERVER_PORT);
 
-            mcpServer = McpServer.async(transport)
-                .serverInfo("pdsoe-mcp", "0.1.0")
-                .capabilities(McpSchema.ServerCapabilities.builder()
-                    .tools(true)
-                    .build())
-                .tools(tools)
+        HttpServletStreamableServerTransportProvider transport =
+            HttpServletStreamableServerTransportProvider.builder()
+                .mcpEndpoint("/mcp")
                 .build();
 
-            jetty = new Server();
-            ServerConnector connector = new ServerConnector(jetty);
-            connector.setHost("127.0.0.1");
-            connector.setPort(PORT);
-            jetty.addConnector(connector);
+        AsyncToolSpecification[] tools = PROVIDERS.stream()
+            .flatMap(p -> p.tools().stream())
+            .toArray(AsyncToolSpecification[]::new);
 
-            ServletContextHandler ctx = new ServletContextHandler();
-            ctx.setContextPath("/");
-            ctx.addServlet(new ServletHolder(transport), "/*");
-            jetty.setHandler(ctx);
+        mcpServer = McpServer.async(transport)
+            .serverInfo("pdsoe-mcp", "0.1.0")
+            .capabilities(McpSchema.ServerCapabilities.builder()
+                .tools(true)
+                .build())
+            .tools(tools)
+            .build();
 
-            jetty.start();
+        jetty = new Server();
+        ServerConnector connector = new ServerConnector(jetty);
+        connector.setHost("127.0.0.1");
+        connector.setPort(port);
+        jetty.addConnector(connector);
 
-            Platform.getLog(Activator.class)
-                .info("PDSOE MCP Server started on http://127.0.0.1:" + PORT + "/mcp ("
-                    + tools.length + " tools)");
+        ServletContextHandler ctx = new ServletContextHandler();
+        ctx.setContextPath("/");
+        ctx.addServlet(new ServletHolder(transport), "/*");
+        jetty.setHandler(ctx);
 
-        } catch (Exception e) {
-            Platform.getLog(Activator.class)
-                .error("Failed to start MCP server", e);
+        jetty.start();
+        boundPort = port;
+
+        Platform.getLog(Activator.class)
+            .info("PDSOE MCP Server started on http://127.0.0.1:" + port + "/mcp ("
+                + tools.length + " tools)");
+    }
+
+    /**
+     * Reconcile the running server with the saved preferences. Called off the UI
+     * thread (it may block on graceful close). Throws if a (re)start fails to bind
+     * so the caller can surface the reason. After a throw the server is stopped.
+     */
+    public void applyConfiguration() throws Exception {
+        IPreferenceStore store = Activator.getDefault().getPreferenceStore();
+        boolean enabled = store.getBoolean(KEY_SERVER_ENABLED);
+        int port = store.getInt(KEY_SERVER_PORT);
+
+        if (!enabled) {
+            if (isRunning()) {
+                stop(false);
+            }
+            return;
         }
+        if (isRunning() && port == boundPort) {
+            return; // already running on the configured port - nothing to do
+        }
+        if (isRunning()) {
+            stop(false); // port changed - restart on the new one
+        }
+        startServer();
     }
 
     public void stop(boolean frameworkStopping) {
@@ -92,6 +135,7 @@ public class McpServerManager {
             // (a try/catch cannot suppress those). So we full no-op and just drop refs.
             mcpServer = null;
             jetty = null;
+            boundPort = -1;
             return;
         }
         if (mcpServer != null) {
@@ -113,6 +157,7 @@ public class McpServerManager {
                 jetty = null;
             }
         }
+        boundPort = -1;
     }
 
     public boolean isRunning() {
