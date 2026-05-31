@@ -64,7 +64,7 @@ subpackages:
 | File | Role |
 |---|---|
 | `Activator.java` | `AbstractUIPlugin` (+ `IStartup`) — entry point. Eclipse calls `start()` at IDE startup (registered in `plugin.xml` as an `org.eclipse.ui.startup` extension). Creates `McpServerManager` and starts it **only if** the `server.enabled` preference is true. Extends `AbstractUIPlugin` (not plain `Plugin`) so the preference page gets an `IPreferenceStore` via `getPreferenceStore()`. Exposes `isServerRunning()` and `applyServerConfiguration()` for the preference page. |
-| `McpServerManager.java` | Wires Jetty 12 + MCP Java SDK. Binds `127.0.0.1` on the configured port (read from preferences at start), streamable HTTP at `/mcp`. Aggregates every `ToolProvider`'s tools (flat-map over a `List<ToolProvider>`), **filters out any tool whose name is in the `tools.disabled` preference**, and registers the rest in one `.tools(...)` call; logs the registered count. Also exposes a static `toolsByDomain()` (returning `LinkedHashMap<String, List<ToolInfo>>`) that the preference page uses to populate its filtering tree from the same `PROVIDERS` list. `start()` is log-only (won't break the bundle at IDE startup); `startServer()` throws so a bind failure can be surfaced; `applyConfiguration()` reconciles the running server to the saved prefs (start/stop/restart on a port **or disabled-tool-set** change - tracked via `boundPort`/`boundDisabledTools`). |
+| `McpServerManager.java` | Wires Jetty 12 + MCP Java SDK. Binds `127.0.0.1` on the configured port (read from preferences at start), streamable HTTP at `/mcp`. Aggregates every `ToolProvider`'s tools (flat-map over a `List<ToolProvider>`), **filters out any tool whose name is in the `tools.disabled` preference**, and registers the rest in one `.tools(...)` call; logs the registered count. Also exposes a static `toolsByDomain()` (returning `LinkedHashMap<String, List<ToolInfo>>`) that the preference page uses to populate its filtering tree from the same `PROVIDERS` list. `start()` is log-only (won't break the bundle at IDE startup); `startServer()` throws so a bind failure can be surfaced; `applyConfiguration()` reconciles the running server to the saved prefs (tracked via `boundPort`/`boundDisabledTools`): a **disabled-tool-set change is applied live** (no restart) via `reconcileTools()` which calls the SDK's `addTool`/`removeTool` + `notifyToolsListChanged` on the running `McpAsyncServer`; only a **port change** (or enable->disable) restarts/stops. Restart-time `stop()` uses a **hard Jetty stop** (`setStopTimeout(0)`) so the socket releases deterministically instead of waiting on a connected client's stream to drain (that wait always timed out, logging "Error stopping Jetty server"). |
 
 **Tool providers** — `src/com/github/xstibo/pdsoe/mcp/tools/`:
 
@@ -255,6 +255,18 @@ classes from bundle JARs already removed during teardown, producing ~85 spurious
 running (JARs still present, clean port release matters). The MCP SDK offers no reactor-free
 shutdown, so skipping the call entirely during teardown is the only fix.
 
+**Live config-apply (preference page Apply):** A change to *only* the disabled-tool set is
+reconciled **on the running server without a restart** - `reconcileTools()` diffs the desired
+set vs. `boundDisabledTools` and calls the SDK's `addTool`/`removeTool` then
+`notifyToolsListChanged`, so the connected client's tool list updates live. A restart is avoided
+here because a graceful Jetty stop waits (up to its stop-timeout) for open connections to drain,
+and a connected MCP client holds a long-lived streamable-HTTP/SSE stream that never drains in the
+window - so the stop *always* timed out (`TimeoutException`, logged as "Error stopping Jetty
+server"). The restart path that remains (a **port change**, or enable->disable) therefore uses a
+**hard stop**: `stop(false)` sets `jetty.setStopTimeout(0)` (and shortens the MCP
+`closeGracefully` block to 2s) so the socket releases immediately and a same-port rebind is
+deterministic (`ServerConnector` defaults to `SO_REUSEADDR`).
+
 ## Design decisions
 
 **Single MCP server, single endpoint** — all tools operate on one domain (the ABL workspace),
@@ -276,8 +288,9 @@ a bearer token is on the roadmap.
 `AbstractPreferenceInitializer` under *Window > Preferences > PDSOE MCP Server* exposes an
 Enable toggle, the bind port, a read-only status line, and a per-tool filter (see
 Architecture > Preferences). Changes apply only on **Apply / Apply-and-Close** (`performOk()`),
-and the server is restarted live — read the port + disabled-tool set at start, reconcile on a
-background `Job`, surface bind failures. The old `-Dpdsoe.mcp.port` system property survives as
+reconciled on a background `Job` (off the UI thread), surfacing bind failures. A **tool-filter
+change is applied live** on the running server (no restart); a **port change** restarts with a
+hard stop (see Runtime lifecycle). The old `-Dpdsoe.mcp.port` system property survives as
 the *default* port (overridden by a saved preference). The bind address is intentionally NOT a
 preference (loopback-only — see above). Per-project/per-path file access control was
 considered and **decided against** (see Roadmap): on a loopback single-user server it is a
@@ -355,7 +368,8 @@ under *Window > Preferences > PDSOE MCP Server* exposing plugin settings:
   Changes apply on Apply/Apply-and-Close via a live restart.
 - [x] Tool filtering — enable/disable individual tools (or whole domains) via a
   `CheckboxTreeViewer`; disabled tool names are stored in `tools.disabled` and the server skips
-  registering them (live restart on change)
+  registering them (applied **live on change, no restart** via the SDK's
+  `addTool`/`removeTool` + `notifyToolsListChanged`)
 - File access control (per-project/per-path allow/deny) — **decided against** for now.
   On a single-user loopback server it is a guard rail, not a security control: project-only
   gating is too blunt to be useful, and path/file-level gating (making `requireContainedPath`

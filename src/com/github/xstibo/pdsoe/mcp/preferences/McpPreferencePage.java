@@ -142,7 +142,9 @@ public class McpPreferencePage extends PreferencePage implements IWorkbenchPrefe
 
         Label hint = new Label(tools, SWT.WRAP);
         hint.setText("Unchecked tools are not registered with the MCP server. "
-            + "Changes apply on Apply / Apply and Close (the server restarts).");
+            + "Changes apply on Apply / Apply and Close - the tool list updates "
+            + "live on the running server (your MCP client refreshes without "
+            + "reconnecting); no restart.");
         hint.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
 
         toolModel = McpServerManager.toolsByDomain();

@@ -62,6 +62,21 @@ public class McpServerManager {
         return byDomain;
     }
 
+    /**
+     * Every tool spec from every provider, keyed by tool name, in registration
+     * order. Shared by {@link #startServer()} (initial registration) and
+     * {@link #reconcileTools(Set)} (live add/remove) so both agree on the spec set.
+     */
+    private static LinkedHashMap<String, AsyncToolSpecification> allToolSpecs() {
+        LinkedHashMap<String, AsyncToolSpecification> specs = new LinkedHashMap<>();
+        for (ToolProvider p : PROVIDERS) {
+            for (AsyncToolSpecification t : p.tools()) {
+                specs.put(t.tool().name(), t);
+            }
+        }
+        return specs;
+    }
+
     /** Parse the comma-separated KEY_DISABLED_TOOLS value into a set of tool names. */
     private static Set<String> parseDisabled(String csv) {
         if (csv == null || csv.isBlank()) {
@@ -112,8 +127,7 @@ public class McpServerManager {
                 .mcpEndpoint("/mcp")
                 .build();
 
-        AsyncToolSpecification[] tools = PROVIDERS.stream()
-            .flatMap(p -> p.tools().stream())
+        AsyncToolSpecification[] tools = allToolSpecs().values().stream()
             .filter(t -> !disabled.contains(t.tool().name()))
             .toArray(AsyncToolSpecification[]::new);
 
@@ -149,6 +163,12 @@ public class McpServerManager {
      * Reconcile the running server with the saved preferences. Called off the UI
      * thread (it may block on graceful close). Throws if a (re)start fails to bind
      * so the caller can surface the reason. After a throw the server is stopped.
+     *
+     * <p>A change to only the disabled-tool set (port unchanged, still enabled) is
+     * applied live via {@link #reconcileTools(Set)} - no Jetty restart. A restart
+     * would force a graceful stop that times out against a connected client's
+     * long-lived stream (logged as "Error stopping Jetty server"). Only a port change
+     * (or enable -> disable) still restarts/stops.
      */
     public void applyConfiguration() throws Exception {
         IPreferenceStore store = Activator.getDefault().getPreferenceStore();
@@ -165,10 +185,41 @@ public class McpServerManager {
         if (isRunning() && port == boundPort && desiredDisabled.equals(boundDisabledTools)) {
             return; // already running on the configured port with the same tool set
         }
+        if (isRunning() && port == boundPort) {
+            reconcileTools(desiredDisabled); // only the tool set changed - apply live
+            return;
+        }
         if (isRunning()) {
-            stop(false); // port and/or tool set changed - restart
+            stop(false); // port changed - restart
         }
         startServer();
+    }
+
+    /**
+     * Apply a disabled-tool-set change to the running server without restarting:
+     * add the newly-enabled tools, remove the newly-disabled ones, then notify the
+     * client its tool list changed. Blocks briefly on each reactive call (we are on
+     * a background Job). On success {@link #boundDisabledTools} is updated.
+     */
+    private void reconcileTools(Set<String> desiredDisabled) throws Exception {
+        LinkedHashMap<String, AsyncToolSpecification> specs = allToolSpecs();
+        for (var entry : specs.entrySet()) {
+            String name = entry.getKey();
+            boolean wasEnabled = !boundDisabledTools.contains(name);
+            boolean nowEnabled = !desiredDisabled.contains(name);
+            if (wasEnabled && !nowEnabled) {
+                mcpServer.removeTool(name).block(Duration.ofSeconds(5));
+            } else if (!wasEnabled && nowEnabled) {
+                mcpServer.addTool(entry.getValue()).block(Duration.ofSeconds(5));
+            }
+        }
+        mcpServer.notifyToolsListChanged().block(Duration.ofSeconds(5));
+        boundDisabledTools = desiredDisabled;
+
+        long enabledCount = specs.keySet().stream()
+            .filter(n -> !desiredDisabled.contains(n)).count();
+        Platform.getLog(Activator.class)
+            .info("PDSOE MCP Server tools reconciled live (" + enabledCount + " tools)");
     }
 
     public void stop(boolean frameworkStopping) {
@@ -188,7 +239,7 @@ public class McpServerManager {
         }
         if (mcpServer != null) {
             try {
-                mcpServer.closeGracefully().block(Duration.ofSeconds(10));
+                mcpServer.closeGracefully().block(Duration.ofSeconds(2));
             } catch (Exception e) {
                 Platform.getLog(Activator.class).error("Error closing MCP server gracefully", e);
             } finally {
@@ -196,7 +247,12 @@ public class McpServerManager {
             }
         }
         if (jetty != null) {
-            jetty.setStopTimeout(5000);
+            // Hard stop (no graceful drain): this is a deliberate restart/stop, so we
+            // do not wait for a connected client's long-lived stream to drain - that
+            // wait always times out and the client reconnects anyway. setStopTimeout(0)
+            // releases the socket immediately and deterministically for a same-port
+            // rebind (ServerConnector defaults to SO_REUSEADDR).
+            jetty.setStopTimeout(0);
             try {
                 jetty.stop();
             } catch (Exception e) {

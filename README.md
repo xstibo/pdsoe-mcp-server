@@ -66,7 +66,7 @@ Inputs are hardened: caller paths are constrained to the project (`..` is reject
 - **Server status** — shows whether the server is currently running.
 - **Tools** — a checkbox tree of all tools grouped by domain. Uncheck individual tools (or a whole domain) to stop the server registering them; everything is enabled by default.
 
-Changes take effect when you press **Apply** (or **Apply and Close**); the server restarts with the new settings, no IDE restart needed.
+Changes take effect when you press **Apply** (or **Apply and Close**) — no IDE restart needed. Tool changes are applied to the running server live (your MCP client's tool list updates without reconnecting); a port change restarts the server.
 
 ## Available tools
 
