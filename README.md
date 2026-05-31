@@ -201,6 +201,7 @@ Planned:
   - [x] Configurable server port
   - [ ] Tool filtering — disable individual tools or whole domains you don't need
   - [ ] File access control — restrict which projects/paths the file tools may touch
+- [ ] (maybe) Automated release on tag push — needs a headless Tycho build to produce the JAR in CI
 - [ ] Route routine logging to a dedicated Eclipse Console instead of the error log
 - [ ] `ParseUnit` caching to skip re-parsing unchanged files
 - [ ] Proparse fallback for `get_callees` (internal procedure call sites)
