@@ -15,3 +15,6 @@ META-INF/maven/
 
 # Eclipse build artifacts
 *.class
+
+# Exported plugin JAR (local install target)
+plugins/
