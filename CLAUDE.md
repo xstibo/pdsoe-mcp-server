@@ -279,8 +279,9 @@ Architecture > Preferences). Changes apply only on **Apply / Apply-and-Close** (
 and the server is restarted live — read the port + disabled-tool set at start, reconcile on a
 background `Job`, surface bind failures. The old `-Dpdsoe.mcp.port` system property survives as
 the *default* port (overridden by a saved preference). The bind address is intentionally NOT a
-preference (loopback-only — see above). File access control is the next preference to add
-(see Roadmap).
+preference (loopback-only — see above). Per-project/per-path file access control was
+considered and **decided against** (see Roadmap): on a loopback single-user server it is a
+guard rail, not a security control, so it is not worth the added complexity.
 
 ### Symbol graph
 
@@ -355,8 +356,11 @@ under *Window > Preferences > PDSOE MCP Server* exposing plugin settings:
 - [x] Tool filtering — enable/disable individual tools (or whole domains) via a
   `CheckboxTreeViewer`; disabled tool names are stored in `tools.disabled` and the server skips
   registering them (live restart on change)
-- [ ] File access control — restrict which projects/paths the read/write/build tools may
-  touch (e.g. an allow/deny list on top of the existing containment checks)
+- File access control (per-project/per-path allow/deny) — **decided against** for now.
+  On a single-user loopback server it is a guard rail, not a security control: project-only
+  gating is too blunt to be useful, and path/file-level gating (making `requireContainedPath`
+  project-aware plus a glob UI) is a lot of surface area for little practical benefit. Revisit
+  only if a concrete need to fence off a specific project or path arises.
 
 ### Performance
 - [ ] Offload the remaining synchronous-on-the-Jetty-thread tools to `boundedElastic` (as done

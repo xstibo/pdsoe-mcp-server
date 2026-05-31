@@ -197,11 +197,10 @@ Working today: all 52 tools above, async/non-blocking handlers, ABL [proparse](h
 
 Planned:
 
-- [ ] Eclipse Preferences page for plugin settings:
+- [x] Eclipse Preferences page for plugin settings:
   - [x] Enable/disable the server, with a live status line
   - [x] Configurable server port
   - [x] Tool filtering — disable individual tools or whole domains you don't need
-  - [ ] File access control — restrict which projects/paths the file tools may touch
 - [ ] (maybe) Automated release on tag push — needs a headless Tycho build to produce the JAR in CI
 - [ ] Route routine logging to a dedicated Eclipse Console instead of the error log
 - [ ] `ParseUnit` caching to skip re-parsing unchanged files
