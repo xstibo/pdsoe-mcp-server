@@ -332,6 +332,8 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
 - [x] Cut a `v1.0.0` GitHub Release with the exported plugin JAR attached
   (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.0.0). No CLI build - the JAR is
   exported from Eclipse (Deployable plug-ins and fragments) and uploaded via `gh release create`.
+- [x] Cut a `v1.1.0` GitHub Release (adds the Eclipse Preferences page: enable toggle, port,
+  live restart, status line). Same export-from-Eclipse + `gh release create` flow as v1.0.0.
 - [ ] (maybe) Automated release on tag push - a `.github/workflows/release.yml` that fires on
   `v*` tags and cuts the GitHub Release. The blocker is there is **no headless build**: a PDE
   plugin needs a Tycho/Maven build to produce the JAR in CI, which means authoring a `pom.xml`
