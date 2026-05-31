@@ -10,6 +10,9 @@ META-INF/maven/
 # Claude Code session data
 .claude/
 
+# Local planning notes (not part of the published project)
+futureplans/
+
 # macOS
 .DS_Store
 
