@@ -251,10 +251,16 @@ shutdown, so skipping the call entirely during teardown is the only fix.
 so one server at `/mcp` is simpler than splitting into multiple logical servers. The set has
 grown to ~52 tools without navigation problems; revisit only if it grows much larger.
 
-**No authorization token** — binds to `127.0.0.1` (loopback only), so it's not network-reachable.
-A token would add `claude mcp add` friction with no security benefit on a single-user machine.
-**If the bind host is ever changed to `0.0.0.0`, a token becomes mandatory** — the file
-read/write/build tools would otherwise be a remote primitive.
+**Loopback-only bind, no authorization token** — binds to `127.0.0.1`, so it's not
+network-reachable. A token would add `claude mcp add` friction with no security benefit on a
+single-user machine. **The bind address is intentionally fixed to loopback and not made
+configurable.** This is a single-user IDE plugin, and the file read/write/build tools would be
+an unauthenticated remote primitive if exposed; binding to `0.0.0.0` is never the right answer.
+The one legitimate cross-host case (PDSOE in a VM/container/WSL or on a remote workstation,
+driven from another machine) is solved with SSH port forwarding
+(`ssh -L 8123:127.0.0.1:8123 ...`) — the server stays loopback-only on both ends and inherits
+the tunnel's encryption and the remote host's auth. So neither a configurable bind address nor
+a bearer token is on the roadmap.
 
 **Settings hardcoded for now** — port is `Integer.getInteger("pdsoe.mcp.port", 8123)`. Full
 Eclipse Preferences (a `FieldEditorPreferencePage` + `AbstractPreferenceInitializer`) is the
@@ -316,8 +322,6 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
 An Eclipse Preferences page (`FieldEditorPreferencePage` + `AbstractPreferenceInitializer`)
 exposing plugin settings, replacing today's hardcoded values:
 - [ ] Server port (currently `Integer.getInteger("pdsoe.mcp.port", 8123)`)
-- [ ] Bind address (loopback vs. other; a token becomes mandatory if non-loopback — see
-  Design decisions)
 - [ ] Tool filtering — enable/disable individual tools (or whole domains) the user doesn't
   want or need; the server would skip registering the disabled ones
 - [ ] File access control — restrict which projects/paths the read/write/build tools may

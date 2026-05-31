@@ -188,7 +188,6 @@ Planned:
 
 - [ ] Eclipse Preferences page for plugin settings:
   - [ ] Configurable server port
-  - [ ] Configurable bind address (a token becomes mandatory if non-loopback)
   - [ ] Tool filtering — disable individual tools or whole domains you don't need
   - [ ] File access control — restrict which projects/paths the file tools may touch
 - [ ] Route routine logging to a dedicated Eclipse Console instead of the error log
