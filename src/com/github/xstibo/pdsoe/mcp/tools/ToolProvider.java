@@ -14,4 +14,10 @@ public interface ToolProvider {
 
     /** @return the tool specifications this provider contributes to the MCP server. */
     List<AsyncToolSpecification> tools();
+
+    /**
+     * @return a human-readable label for this provider's domain, used to group its
+     *         tools in the preferences UI (the tool-filtering tree).
+     */
+    String domain();
 }

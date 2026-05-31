@@ -1,5 +1,6 @@
 package com.github.xstibo.pdsoe.mcp.preferences;
 
+import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_DISABLED_TOOLS;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_ENABLED;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_PORT;
 
@@ -7,6 +8,10 @@ import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.MessageDialog;
 import org.eclipse.jface.preference.IPreferenceStore;
 import org.eclipse.jface.preference.PreferencePage;
+import org.eclipse.jface.viewers.CheckboxTreeViewer;
+import org.eclipse.jface.viewers.ICheckStateProvider;
+import org.eclipse.jface.viewers.ITreeContentProvider;
+import org.eclipse.jface.viewers.LabelProvider;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.layout.GridData;
 import org.eclipse.swt.layout.GridLayout;
@@ -23,22 +28,42 @@ import org.eclipse.ui.IWorkbenchPreferencePage;
 import org.eclipse.ui.PlatformUI;
 
 import com.github.xstibo.pdsoe.mcp.Activator;
+import com.github.xstibo.pdsoe.mcp.McpServerManager;
+import com.github.xstibo.pdsoe.mcp.McpServerManager.ToolInfo;
+
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Set;
+import java.util.TreeSet;
 
 /**
- * Preferences for the embedded MCP server: Enable on/off, the bind port, and a
- * read-only status line, grouped into "Server Configuration" and "Server Status"
- * sections. The bind address stays loopback-only and is not exposed.
+ * Preferences for the embedded MCP server: Enable on/off, the bind port, a
+ * read-only status line, and a per-tool filter, grouped into "Server
+ * Configuration", "Server Status", and "Tools" sections. The bind address stays
+ * loopback-only and is not exposed.
  *
  * Changes are applied only when the user presses Apply or Apply and Close
  * (performOk). The server is then reconciled to the new settings on a background
  * Job (the graceful close can block), and the status line / any bind failure is
  * reported back on the UI thread.
+ *
+ * Tool filtering keeps a working copy of the *disabled* tool names
+ * ({@link #disabledTools}) as the source of truth for the tree; an
+ * {@link ICheckStateProvider} derives each row's checked/grayed state from it, so
+ * the state is correct even for collapsed (never-realized) tree nodes.
  */
 public class McpPreferencePage extends PreferencePage implements IWorkbenchPreferencePage {
 
     private Button enableButton;
     private Text portText;
     private Label statusLabel;
+
+    private CheckboxTreeViewer toolsViewer;
+    /** domain label -> tools in that domain, in registration order. */
+    private LinkedHashMap<String, List<ToolInfo>> toolModel;
+    /** Working copy of disabled tool names; mutated as the user toggles the tree. */
+    private final Set<String> disabledTools = new HashSet<>();
 
     @Override
     public void init(IWorkbench workbench) {
@@ -97,9 +122,155 @@ public class McpPreferencePage extends PreferencePage implements IWorkbenchPrefe
         statusLabel = new Label(status, SWT.NONE);
         statusLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
+        // --- Tools ----------------------------------------------------------------
+        createToolsGroup(top, store);
+
         refreshStatus(null);
         validate();
         return top;
+    }
+
+    /** Build the "Tools" section: a checkbox tree of domains and their tools. */
+    private void createToolsGroup(Composite top, IPreferenceStore store) {
+        Group tools = new Group(top, SWT.NONE);
+        tools.setText("Tools");
+        GridLayout toolsLayout = new GridLayout(1, false);
+        toolsLayout.marginWidth = 10;
+        toolsLayout.marginHeight = 10;
+        tools.setLayout(toolsLayout);
+        tools.setLayoutData(new GridData(SWT.FILL, SWT.FILL, true, true));
+
+        Label hint = new Label(tools, SWT.WRAP);
+        hint.setText("Unchecked tools are not registered with the MCP server. "
+            + "Changes apply on Apply / Apply and Close (the server restarts).");
+        hint.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+
+        toolModel = McpServerManager.toolsByDomain();
+        loadDisabledFromStore(store);
+
+        toolsViewer = new CheckboxTreeViewer(tools, SWT.BORDER);
+        GridData treeGd = new GridData(SWT.FILL, SWT.FILL, true, true);
+        treeGd.heightHint = 220;
+        toolsViewer.getTree().setLayoutData(treeGd);
+
+        toolsViewer.setContentProvider(new ITreeContentProvider() {
+            @Override
+            public Object[] getElements(Object input) {
+                return toolModel.keySet().toArray();
+            }
+
+            @Override
+            public Object[] getChildren(Object parent) {
+                if (parent instanceof String domain) {
+                    return toolModel.get(domain).toArray();
+                }
+                return new Object[0];
+            }
+
+            @Override
+            public Object getParent(Object element) {
+                if (element instanceof ToolInfo info) {
+                    return domainOf(info);
+                }
+                return null;
+            }
+
+            @Override
+            public boolean hasChildren(Object element) {
+                return element instanceof String;
+            }
+        });
+
+        toolsViewer.setLabelProvider(new LabelProvider() {
+            @Override
+            public String getText(Object element) {
+                if (element instanceof String domain) {
+                    return domain;
+                }
+                if (element instanceof ToolInfo info) {
+                    return info.name();
+                }
+                return String.valueOf(element);
+            }
+        });
+
+        toolsViewer.setCheckStateProvider(new ICheckStateProvider() {
+            @Override
+            public boolean isChecked(Object element) {
+                if (element instanceof ToolInfo info) {
+                    return !disabledTools.contains(info.name());
+                }
+                if (element instanceof String domain) {
+                    return enabledCount(domain) > 0; // checked (solid or grayed) if any enabled
+                }
+                return false;
+            }
+
+            @Override
+            public boolean isGrayed(Object element) {
+                if (element instanceof String domain) {
+                    int enabled = enabledCount(domain);
+                    return enabled > 0 && enabled < toolModel.get(domain).size();
+                }
+                return false;
+            }
+        });
+
+        toolsViewer.addCheckStateListener(event -> {
+            Object element = event.getElement();
+            boolean checked = event.getChecked();
+            if (element instanceof String domain) {
+                for (ToolInfo info : toolModel.get(domain)) {
+                    setToolEnabled(info, checked);
+                }
+            } else if (element instanceof ToolInfo info) {
+                setToolEnabled(info, checked);
+            }
+            toolsViewer.refresh(); // recompute checked/grayed via the provider
+        });
+
+        toolsViewer.setInput(toolModel);
+    }
+
+    /** Number of enabled (not-disabled) tools in a domain. */
+    private int enabledCount(String domain) {
+        int count = 0;
+        for (ToolInfo info : toolModel.get(domain)) {
+            if (!disabledTools.contains(info.name())) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private String domainOf(ToolInfo info) {
+        for (var entry : toolModel.entrySet()) {
+            if (entry.getValue().contains(info)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
+    private void setToolEnabled(ToolInfo info, boolean enabled) {
+        if (enabled) {
+            disabledTools.remove(info.name());
+        } else {
+            disabledTools.add(info.name());
+        }
+    }
+
+    private void loadDisabledFromStore(IPreferenceStore store) {
+        disabledTools.clear();
+        String csv = store.getString(KEY_DISABLED_TOOLS);
+        if (csv != null) {
+            for (String part : csv.split(",")) {
+                String name = part.trim();
+                if (!name.isEmpty()) {
+                    disabledTools.add(name);
+                }
+            }
+        }
     }
 
     private void validate() {
@@ -129,6 +300,8 @@ public class McpPreferencePage extends PreferencePage implements IWorkbenchPrefe
         IPreferenceStore store = getPreferenceStore();
         store.setValue(KEY_SERVER_ENABLED, enableButton.getSelection());
         store.setValue(KEY_SERVER_PORT, Integer.parseInt(portText.getText().trim()));
+        // Persist the disabled set sorted, so the stored value is stable/diff-friendly.
+        store.setValue(KEY_DISABLED_TOOLS, String.join(",", new TreeSet<>(disabledTools)));
         // Capture the main workbench window shell + its display now: both outlive
         // this preference dialog, so feedback still works on "Apply and Close"
         // (which disposes this page and its statusLabel before the Job finishes).
@@ -142,6 +315,11 @@ public class McpPreferencePage extends PreferencePage implements IWorkbenchPrefe
         IPreferenceStore store = getPreferenceStore();
         enableButton.setSelection(store.getDefaultBoolean(KEY_SERVER_ENABLED));
         portText.setText(Integer.toString(store.getDefaultInt(KEY_SERVER_PORT)));
+        // Default is "no tools disabled" - re-check everything in the tree.
+        disabledTools.clear();
+        if (toolsViewer != null) {
+            toolsViewer.refresh();
+        }
         validate();
         super.performDefaults();
     }

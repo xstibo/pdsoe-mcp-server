@@ -31,6 +31,11 @@ import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.result;
 public class EditorStateTools implements ToolProvider {
 
     @Override
+    public String domain() {
+        return "Editor state";
+    }
+
+    @Override
     public List<AsyncToolSpecification> tools() {
         return List.of(getOpenFileTool(), getCursorPositionTool(), getSelectionTool(),
             listOpenEditorsTool(), navigateToTool(), saveFileTool(), saveAllTool());

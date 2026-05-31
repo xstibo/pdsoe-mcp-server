@@ -35,6 +35,11 @@ import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.result;
 public class DiagnosticsTools implements ToolProvider {
 
     @Override
+    public String domain() {
+        return "Diagnostics & build";
+    }
+
+    @Override
     public List<AsyncToolSpecification> tools() {
         return List.of(getMarkersTool(), getMarkersForFileTool(), buildProjectTool(),
             buildFileTool(), cleanProjectTool(), getConsoleOutputTool());

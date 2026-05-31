@@ -1,5 +1,6 @@
 package com.github.xstibo.pdsoe.mcp.preferences;
 
+import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_DISABLED_TOOLS;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_ENABLED;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_PORT;
 
@@ -27,5 +28,7 @@ public class PreferenceInitializer extends AbstractPreferenceInitializer {
         // Preserve the historical -Dpdsoe.mcp.port escape hatch as the default;
         // a saved preference value overrides it.
         defaults.putInt(KEY_SERVER_PORT, Integer.getInteger("pdsoe.mcp.port", 8123));
+        // No tools disabled by default - the whole set is registered.
+        defaults.put(KEY_DISABLED_TOOLS, "");
     }
 }

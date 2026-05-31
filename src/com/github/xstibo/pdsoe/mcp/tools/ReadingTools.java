@@ -29,6 +29,11 @@ import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.result;
 public class ReadingTools implements ToolProvider {
 
     @Override
+    public String domain() {
+        return "Reading code";
+    }
+
+    @Override
     public List<AsyncToolSpecification> tools() {
         return List.of(readFileTool(), readLinesTool(), getFileOutlineTool(),
             getMethodSourceTool(), getMethodSignatureTool(), getXrefTool());

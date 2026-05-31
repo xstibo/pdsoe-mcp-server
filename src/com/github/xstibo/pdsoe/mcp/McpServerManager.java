@@ -1,5 +1,6 @@
 package com.github.xstibo.pdsoe.mcp;
 
+import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_DISABLED_TOOLS;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_ENABLED;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_PORT;
 
@@ -24,7 +25,10 @@ import org.eclipse.jetty.server.ServerConnector;
 import org.eclipse.jface.preference.IPreferenceStore;
 
 import java.time.Duration;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Set;
 
 public class McpServerManager {
 
@@ -38,11 +42,49 @@ public class McpServerManager {
         new EditingTools(),
         new FileHistoryTools());
 
+    /** A tool's name + description, for the preference page's filtering tree. */
+    public record ToolInfo(String name, String description) {
+    }
+
+    /**
+     * Every tool grouped by its provider's domain, in provider/registration order.
+     * Reuses {@link #PROVIDERS} so the preference UI and the server agree on the
+     * exact tool set. Cheap to call (the providers are stateless tool factories).
+     */
+    public static LinkedHashMap<String, List<ToolInfo>> toolsByDomain() {
+        LinkedHashMap<String, List<ToolInfo>> byDomain = new LinkedHashMap<>();
+        for (ToolProvider p : PROVIDERS) {
+            List<ToolInfo> infos = p.tools().stream()
+                .map(t -> new ToolInfo(t.tool().name(), t.tool().description()))
+                .toList();
+            byDomain.put(p.domain(), infos);
+        }
+        return byDomain;
+    }
+
+    /** Parse the comma-separated KEY_DISABLED_TOOLS value into a set of tool names. */
+    private static Set<String> parseDisabled(String csv) {
+        if (csv == null || csv.isBlank()) {
+            return Set.of();
+        }
+        Set<String> names = new HashSet<>();
+        for (String part : csv.split(",")) {
+            String name = part.trim();
+            if (!name.isEmpty()) {
+                names.add(name);
+            }
+        }
+        return names;
+    }
+
     private Server jetty;
     private McpAsyncServer mcpServer;
 
     /** The port the running server is bound on; used to detect a port change. */
     private int boundPort = -1;
+
+    /** The disabled-tool set the running server was built with; detects a filter change. */
+    private Set<String> boundDisabledTools = Set.of();
 
     /**
      * Start the server, swallowing and logging any failure. Used at IDE startup
@@ -61,7 +103,9 @@ public class McpServerManager {
      * use). Used by the reconcile path so the preference page can report it.
      */
     public void startServer() throws Exception {
-        int port = Activator.getDefault().getPreferenceStore().getInt(KEY_SERVER_PORT);
+        IPreferenceStore store = Activator.getDefault().getPreferenceStore();
+        int port = store.getInt(KEY_SERVER_PORT);
+        Set<String> disabled = parseDisabled(store.getString(KEY_DISABLED_TOOLS));
 
         HttpServletStreamableServerTransportProvider transport =
             HttpServletStreamableServerTransportProvider.builder()
@@ -70,6 +114,7 @@ public class McpServerManager {
 
         AsyncToolSpecification[] tools = PROVIDERS.stream()
             .flatMap(p -> p.tools().stream())
+            .filter(t -> !disabled.contains(t.tool().name()))
             .toArray(AsyncToolSpecification[]::new);
 
         mcpServer = McpServer.async(transport)
@@ -93,6 +138,7 @@ public class McpServerManager {
 
         jetty.start();
         boundPort = port;
+        boundDisabledTools = disabled;
 
         Platform.getLog(Activator.class)
             .info("PDSOE MCP Server started on http://127.0.0.1:" + port + "/mcp ("
@@ -115,11 +161,12 @@ public class McpServerManager {
             }
             return;
         }
-        if (isRunning() && port == boundPort) {
-            return; // already running on the configured port - nothing to do
+        Set<String> desiredDisabled = parseDisabled(store.getString(KEY_DISABLED_TOOLS));
+        if (isRunning() && port == boundPort && desiredDisabled.equals(boundDisabledTools)) {
+            return; // already running on the configured port with the same tool set
         }
         if (isRunning()) {
-            stop(false); // port changed - restart on the new one
+            stop(false); // port and/or tool set changed - restart
         }
         startServer();
     }
@@ -136,6 +183,7 @@ public class McpServerManager {
             mcpServer = null;
             jetty = null;
             boundPort = -1;
+            boundDisabledTools = Set.of();
             return;
         }
         if (mcpServer != null) {
@@ -158,6 +206,7 @@ public class McpServerManager {
             }
         }
         boundPort = -1;
+        boundDisabledTools = Set.of();
     }
 
     public boolean isRunning() {

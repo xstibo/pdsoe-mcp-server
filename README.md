@@ -64,6 +64,7 @@ Inputs are hardened: caller paths are constrained to the project (`..` is reject
 - **Enable HTTP MCP Server** — turn the server on or off (on by default).
 - **Port** — the loopback port the server binds (default `8123`).
 - **Server status** — shows whether the server is currently running.
+- **Tools** — a checkbox tree of all tools grouped by domain. Uncheck individual tools (or a whole domain) to stop the server registering them; everything is enabled by default.
 
 Changes take effect when you press **Apply** (or **Apply and Close**); the server restarts with the new settings, no IDE restart needed.
 
@@ -199,7 +200,7 @@ Planned:
 - [ ] Eclipse Preferences page for plugin settings:
   - [x] Enable/disable the server, with a live status line
   - [x] Configurable server port
-  - [ ] Tool filtering — disable individual tools or whole domains you don't need
+  - [x] Tool filtering — disable individual tools or whole domains you don't need
   - [ ] File access control — restrict which projects/paths the file tools may touch
 - [ ] (maybe) Automated release on tag push — needs a headless Tycho build to produce the JAR in CI
 - [ ] Route routine logging to a dedicated Eclipse Console instead of the error log

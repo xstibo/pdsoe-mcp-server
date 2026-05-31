@@ -50,6 +50,11 @@ import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.result;
 public class WorkspaceTools implements ToolProvider {
 
     @Override
+    public String domain() {
+        return "Workspace & file navigation";
+    }
+
+    @Override
     public List<AsyncToolSpecification> tools() {
         return List.of(listProjectsTool(), listAblFilesTool(), listAllFilesTool(), searchFilesTool(),
             searchInFilesTool(), fileSearchRegexpTool(), getProjectInfoTool(), getPropathTool(),

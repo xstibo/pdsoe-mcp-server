@@ -29,6 +29,11 @@ public class SymbolGraphTools implements ToolProvider {
     private final Map<String, SymbolIndex> projectIndices = new ConcurrentHashMap<>();
 
     @Override
+    public String domain() {
+        return "Symbol graph";
+    }
+
+    @Override
     public List<AsyncToolSpecification> tools() {
         return List.of(getCalleesTool(), buildSymbolIndexTool(), getCallersTool(),
             findSymbolReferencesTool(), getTypeHierarchyTool());

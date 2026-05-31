@@ -29,6 +29,11 @@ import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.result;
 public class FileHistoryTools implements ToolProvider {
 
     @Override
+    public String domain() {
+        return "File history";
+    }
+
+    @Override
     public List<AsyncToolSpecification> tools() {
         return List.of(listFileHistoryTool(), getFileHistoryContentTool(), diffFileTool());
     }

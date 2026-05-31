@@ -38,6 +38,11 @@ import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.writeAllLines;
 public class EditingTools implements ToolProvider {
 
     @Override
+    public String domain() {
+        return "Code editing";
+    }
+
+    @Override
     public List<AsyncToolSpecification> tools() {
         return List.of(writeFileTool(), insertAtLineTool(), replaceLinesTool(), replaceInFileTool(),
             deleteLinesTool(), undoEditTool(), applyPatchTool());
