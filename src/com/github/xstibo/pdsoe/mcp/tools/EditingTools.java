@@ -7,7 +7,6 @@ import org.eclipse.core.resources.IFileState;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.WorkspaceJob;
-import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
@@ -15,7 +14,7 @@ import reactor.core.publisher.Mono;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -24,8 +23,11 @@ import java.util.regex.Pattern;
 
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.countOccurrences;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.describe;
+import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.detectFormat;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.ensureParentFolders;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.error;
+import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.fileCharset;
+import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.normalizeLineEndings;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.param;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.readAllLines;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.requireContainedPath;
@@ -84,16 +86,20 @@ public class EditingTools implements ToolProvider {
                     @Override
                     public IStatus runInWorkspace(IProgressMonitor monitor) {
                         try {
-                            byte[] bytes = content.getBytes(StandardCharsets.UTF_8);
-                            ByteArrayInputStream stream = new ByteArrayInputStream(bytes);
                             if (file.exists()) {
-                                file.setContents(stream, IResource.KEEP_HISTORY, monitor);
+                                // Preserve the existing file's charset and line endings so an
+                                // overwrite does not flip every line's terminator (see Gotchas).
+                                ToolSupport.TextFormat fmt = detectFormat(file);
+                                byte[] bytes = normalizeLineEndings(content, fmt.lineSeparator())
+                                    .getBytes(fmt.charset());
+                                file.setContents(new ByteArrayInputStream(bytes), IResource.KEEP_HISTORY, monitor);
                             } else {
+                                byte[] bytes = content.getBytes(fileCharset(file));
                                 ensureParentFolders(file, monitor);
-                                file.create(stream, IResource.NONE, monitor);
+                                file.create(new ByteArrayInputStream(bytes), IResource.NONE, monitor);
                             }
                             sink.success(result("Written: " + path));
-                        } catch (CoreException e) {
+                        } catch (Exception e) {
                             sink.success(error(describe(e)));
                         }
                         return Status.OK_STATUS;
@@ -146,7 +152,9 @@ public class EditingTools implements ToolProvider {
                         try {
                             List<String> lines = readAllLines(file);
                             int idx = Math.min(line - 1, lines.size());
-                            String normalized = content.replaceAll("\n+$", "");
+                            // Split on LF only; writeAllLines re-applies the file's real EOL, so
+                            // normalize CRLF/CR out of the incoming content first to avoid doubled CRs.
+                            String normalized = content.replace("\r\n", "\n").replace("\r", "\n").replaceAll("\n+$", "");
                             lines.addAll(idx, Arrays.asList(normalized.split("\n", -1)));
                             writeAllLines(file, lines, monitor);
                             sink.success(result("Inserted at line " + line));
@@ -214,7 +222,9 @@ public class EditingTools implements ToolProvider {
                                 return Status.OK_STATUS;
                             }
                             lines.subList(s, e2).clear();
-                            String normalized = content.replaceAll("\n+$", "");
+                            // Split on LF only; writeAllLines re-applies the file's real EOL, so
+                            // normalize CRLF/CR out of the incoming content first to avoid doubled CRs.
+                            String normalized = content.replace("\r\n", "\n").replace("\r", "\n").replaceAll("\n+$", "");
                             lines.addAll(s, Arrays.asList(normalized.split("\n", -1)));
                             writeAllLines(file, lines, monitor);
                             sink.success(result("Replaced lines " + startLine + "-" + endLine));
@@ -271,15 +281,21 @@ public class EditingTools implements ToolProvider {
                     @Override
                     public IStatus runInWorkspace(IProgressMonitor monitor) {
                         try (InputStream is = file.getContents()) {
-                            String original = new String(is.readAllBytes(), StandardCharsets.UTF_8);
+                            Charset cs = fileCharset(file);
+                            String original = new String(is.readAllBytes(), cs);
+                            // Match the replacement's line endings to the file's so a multi-line
+                            // replacement does not inject lone LFs into a CRLF file.
+                            String sep = original.contains("\r\n") ? "\r\n"
+                                : original.indexOf('\r') >= 0 ? "\r" : "\n";
+                            String safeReplace = normalizeLineEndings(replace, sep);
                             Pattern p = useRegex ? Pattern.compile(search)
                                 : Pattern.compile(Pattern.quote(search));
                             boolean replaceAll = Boolean.TRUE.equals(req.arguments().get("all"));
                             String updated = replaceAll
-                                ? p.matcher(original).replaceAll(replace)
-                                : p.matcher(original).replaceFirst(replace);
+                                ? p.matcher(original).replaceAll(safeReplace)
+                                : p.matcher(original).replaceFirst(safeReplace);
                             int count = countOccurrences(original, search);
-                            byte[] bytes = updated.getBytes(StandardCharsets.UTF_8);
+                            byte[] bytes = updated.getBytes(cs);
                             file.setContents(new ByteArrayInputStream(bytes), IResource.KEEP_HISTORY, monitor);
                             sink.success(result("Replaced " + (replaceAll ? count : Math.min(count, 1)) + " occurrence(s)"));
                         } catch (Exception e) {

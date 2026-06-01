@@ -241,6 +241,15 @@ Durable findings (verified against PDSOE 12.8 on a large production ABL project)
   bulk read works block-at-a-time — keep both when touching that code.
 - **Unified-diff hunk length comes from `origCount`** in `@@ -start,origCount @@`, not the count
   of `-` lines.
+- **Edit tools must preserve each file's original EOL, trailing-newline state, and charset.**
+  ABL files on Windows are CRLF; `BufferedReader.readLine()` strips terminators, so a naive
+  rewrite with `\n` flips every line and SVN/Git report the whole file changed (a real bug hit
+  in the field). `ToolSupport.writeAllLines` now calls `detectFormat(file)` (reads the still-
+  on-disk content) and re-joins with the original separator, only appending a trailing newline
+  if the file had one; `readAllLines`/`writeAllLines`/`replace_in_file`/`write_file` use
+  `fileCharset(file)` (the Eclipse `IFile.getCharset()`), not hardcoded UTF-8. `write_file`
+  normalizes incoming content to the existing file's EOL via `normalizeLineEndings`. Keep all
+  write paths routed through these helpers when touching the editing tools.
 
 ## Runtime lifecycle
 

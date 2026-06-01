@@ -24,6 +24,7 @@ import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
@@ -163,11 +164,60 @@ public final class ToolSupport {
         }
     }
 
+    // --- text-format preservation -------------------------------------------
+
+    /**
+     * The on-disk text format of a file: its charset, dominant line separator, and whether
+     * it ends with a trailing newline. Edits capture this before rewriting so they preserve
+     * the file's terminators - a forced-LF rewrite of a CRLF file makes SVN/Git report every
+     * line changed (see CLAUDE.md Gotchas).
+     */
+    public record TextFormat(Charset charset, String lineSeparator, boolean endsWithNewline) {
+        /** Fallback when the format cannot be read (e.g. a brand-new file). */
+        public static final TextFormat DEFAULT =
+            new TextFormat(StandardCharsets.UTF_8, System.lineSeparator(), true);
+    }
+
+    /** The file's effective Eclipse charset (file -&gt; container -&gt; workspace default); UTF-8 on failure. */
+    public static Charset fileCharset(IFile file) {
+        try {
+            return Charset.forName(file.getCharset());
+        } catch (Exception e) {
+            return StandardCharsets.UTF_8;
+        }
+    }
+
+    /**
+     * Detects {@code file}'s on-disk {@link TextFormat} by reading its raw content once. For a
+     * file that does not exist yet, returns the inherited charset with platform-default EOL.
+     */
+    public static TextFormat detectFormat(IFile file) throws CoreException, IOException {
+        Charset cs = fileCharset(file);
+        if (!file.exists()) return new TextFormat(cs, System.lineSeparator(), true);
+        byte[] bytes;
+        try (InputStream is = file.getContents()) {
+            bytes = is.readAllBytes();
+        }
+        String content = new String(bytes, cs);
+        String sep = content.contains("\r\n") ? "\r\n"
+            : content.indexOf('\r') >= 0 ? "\r"
+            : "\n";
+        char last = content.isEmpty() ? '\0' : content.charAt(content.length() - 1);
+        boolean endsWithNewline = last == '\n' || last == '\r';
+        return new TextFormat(cs, sep, endsWithNewline);
+    }
+
+    /** Rewrites every line ending in {@code s} to {@code sep} (collapsing CRLF/CR/LF first). */
+    public static String normalizeLineEndings(String s, String sep) {
+        String lf = s.replace("\r\n", "\n").replace("\r", "\n");
+        return sep.equals("\n") ? lf : lf.replace("\n", sep);
+    }
+
     // --- small-file IO ------------------------------------------------------
 
     public static List<String> readAllLines(IFile file) throws Exception {
         try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(file.getContents(), StandardCharsets.UTF_8))) {
+                new InputStreamReader(file.getContents(), fileCharset(file)))) {
             List<String> lines = new ArrayList<>();
             String line;
             while ((line = reader.readLine()) != null) lines.add(line);
@@ -175,8 +225,22 @@ public final class ToolSupport {
         }
     }
 
+    /**
+     * Writes {@code lines} back to {@code file}, preserving the file's existing charset, line
+     * separator, and trailing-newline state (detected from the still-unmodified on-disk
+     * content). {@code readLine()} strips terminators, so without this the file would be
+     * rewritten with LF and a forced trailing newline - see {@link TextFormat}.
+     */
     public static void writeAllLines(IFile file, List<String> lines, IProgressMonitor monitor) throws CoreException {
-        byte[] bytes = (String.join("\n", lines) + "\n").getBytes(StandardCharsets.UTF_8);
+        TextFormat fmt;
+        try {
+            fmt = detectFormat(file);
+        } catch (CoreException | IOException e) {
+            fmt = TextFormat.DEFAULT;
+        }
+        StringBuilder sb = new StringBuilder(String.join(fmt.lineSeparator(), lines));
+        if (fmt.endsWithNewline()) sb.append(fmt.lineSeparator());
+        byte[] bytes = sb.toString().getBytes(fmt.charset());
         file.setContents(new ByteArrayInputStream(bytes), IResource.KEEP_HISTORY, monitor);
     }
 

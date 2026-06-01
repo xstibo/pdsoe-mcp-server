@@ -3,7 +3,7 @@ Automatic-Module-Name: com.github.xstibo.pdsoe.mcp
 Bundle-ManifestVersion: 2
 Bundle-Name: PDSOE MCP Server
 Bundle-SymbolicName: com.github.xstibo.pdsoe.mcp;singleton:=true
-Bundle-Version: 1.2.0.qualifier
+Bundle-Version: 1.2.1.qualifier
 Bundle-Activator: com.github.xstibo.pdsoe.mcp.Activator
 Bundle-ActivationPolicy: lazy
 Bundle-RequiredExecutionEnvironment: JavaSE-17
