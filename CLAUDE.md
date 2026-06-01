@@ -361,6 +361,10 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
 - [x] Cut a `v1.2.0` GitHub Release (adds per-tool filtering via a `CheckboxTreeViewer`,
   applied live with no restart; plus the hard Jetty stop on port-change restart). Same
   export-from-Eclipse + `gh release create` flow as v1.0.0.
+- [x] Cut a `v1.2.1` GitHub Release (bugfix: edit tools now preserve each file's line endings,
+  trailing-newline state, and Eclipse charset instead of forcing LF/UTF-8 - a forced-LF rewrite
+  made SVN/Git report every line changed on CRLF files; see Gotchas). Same export-from-Eclipse +
+  `gh release create` flow as v1.0.0.
 - [ ] (maybe) Automated release on tag push - a `.github/workflows/release.yml` that fires on
   `v*` tags and cuts the GitHub Release. The blocker is there is **no headless build**: a PDE
   plugin needs a Tycho/Maven build to produce the JAR in CI, which means authoring a `pom.xml`
