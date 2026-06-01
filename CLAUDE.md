@@ -94,83 +94,19 @@ is required for `IFileEditorInput` (a split package — the interface ships in `
 
 ## MCP tools
 
-### Workspace & file navigation
-_(standard `IWorkspace` / `IProject` / `IFile` APIs)_
+**The full per-tool list lives in `README.md` (Available tools) - that is the single source
+of truth; update it when tools change.** The seven domains, their provider class, and the
+Eclipse API each is built on:
 
-| Tool | Description |
-|---|---|
-| `list_projects` | All projects in the workspace (open/closed) |
-| `list_abl_files` | ABL files (`.p`, `.cls`, `.i`, `.w`, `.t`) in a project |
-| `list_all_files` | All files in a project with optional extension filter |
-| `search_files` | Find files by name or glob pattern (bare names auto-wrap to `**/*name*`) |
-| `search_in_files` | Grep-like content search (`TextSearchEngine`); capped at `MAX_SEARCH_MATCHES` (500) |
-| `get_project_info` | Project natures, description, and properties |
-| `get_propath` | Configured PROPATH; parses `.propath` XML, resolves `@{ROOT}`, one entry per line |
-| `list_includes` | `.i` files directly referenced in a source file (regex scan, no xref needed) |
-| `find_files_including` | All ABL files that include a given `.i` file (reverse of `list_includes`) |
-| `get_file_info` | File metadata: size, exists, last modified, line count |
-| `delete_file` / `move_file` / `copy_file` | Delete / rename-move / duplicate a file |
-| `create_folder` / `delete_folder` | Create / delete a folder (and contents) |
-| `refresh_project` | Re-sync a project with the file system after external changes |
-| `get_project_layout` | Tree view of all files and folders in a project |
-| `file_search_regexp` | Find files whose names match a Java regex (project-relative results) |
-
-### Reading code
-_(standard `IFile.getContents()` + ABL proparse parser for structure)_
-
-| Tool | Description |
-|---|---|
-| `read_file` | Full file content (capped at `MAX_READ_BYTES`, 1 MB) |
-| `read_lines` | A line range, each line prefixed `N: content` |
-| `get_file_outline` | Procedures, functions, classes in a file (proparse) |
-| `get_method_source` | Source of a named procedure/function/method (proparse) |
-| `get_method_signature` | Signature only (header + parameters, no body) (proparse) |
-| `get_xref` | Parsed `.xref.xml` cross-reference data; absolute or project-relative path |
-
-### Symbol graph
-_(xref-xml backed; run `build_symbol_index` first for the project-wide tools)_
-
-| Tool | Description |
-|---|---|
-| `get_callees` | External RUN (`.p`) and INVOKE (class method) calls from a file; single `.xref.xml` or the in-memory index |
-| `build_symbol_index` | Walks all `.xref.xml` under `xref_base_path`, builds an in-memory cross-file index; incremental (mtime); parses in parallel |
-| `get_callers` | Files that RUN/INVOKE a given procedure/`.p`/class method (requires index) |
-| `find_symbol_references` | All references (RUN/INVOKE/PROCEDURE decl) to a symbol (requires index) |
-| `get_type_hierarchy` | Parent class, interfaces, known subclasses of an ABL class (requires index) |
-
-### Editor state
-_(standard `IWorkbench` / `ITextEditor` / `ITextSelection` APIs)_
-
-| Tool | Description |
-|---|---|
-| `get_open_file` | Workspace path of the active editor file |
-| `get_cursor_position` / `get_selection` | Cursor line/column / selected text and range |
-| `list_open_editors` | All open editor tabs |
-| `navigate_to` | Open a file in the editor, optionally at a line |
-| `save_file` / `save_all` | Save one open editor (triggers ABL compile) / all dirty editors |
-
-### Diagnostics & build
-_(standard `IMarker` + `WorkspaceJob`)_
-
-| Tool | Description |
-|---|---|
-| `get_markers` / `get_markers_for_file` | Problem markers for a project / a file |
-| `build_project` | Full or incremental build via the ABL builder; returns markers |
-| `build_file` | Incremental build, returns only that file's markers |
-| `clean_project` | Clean build — removes output and rebuilds |
-| `get_console_output` | Content of the last active Eclipse console |
-
-### Code editing
-_(standard `IFile.setContents()` + Eclipse local history)_
-
-| Tool | Description |
-|---|---|
-| `write_file` | Write full content (creates the file if missing) |
-| `insert_at_line` / `replace_lines` / `delete_lines_in_file` | Line-based edits |
-| `replace_in_file` | Find-and-replace (text or regex) |
-| `apply_patch` | Apply a unified diff |
-| `undo_edit` | Restore the previous state from local history |
-| `list_file_history` / `get_file_history_content` / `diff_file` | List / read / diff local-history snapshots |
+| Domain | Provider (count) | Built on |
+|---|---|---|
+| Workspace & file navigation | `WorkspaceTools` (18) | `IWorkspace` / `IProject` / `IFile` |
+| Reading code | `ReadingTools` (6) | `IFile.getContents()` + proparse parser |
+| Symbol graph | `SymbolGraphTools` (5) | xref-xml index (run `build_symbol_index` first) |
+| Editor state | `EditorStateTools` (7) | `IWorkbench` / `ITextEditor` / `ITextSelection` |
+| Diagnostics & build | `DiagnosticsTools` (6) | `IMarker` + `WorkspaceJob` |
+| Code editing | `EditingTools` (7) | `IFile.setContents()` + Eclipse local history |
+| File history | `FileHistoryTools` (3) | Eclipse local history |
 
 ### Not feasible (no public PDSOE API)
 - **PROPATH-aware name resolution** (resolving `RUN procedure-name` without `.p` to a specific
