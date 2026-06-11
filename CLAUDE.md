@@ -186,6 +186,29 @@ Durable findings (verified against PDSOE 12.8 on a large production ABL project)
   `fileCharset(file)` (the Eclipse `IFile.getCharset()`), not hardcoded UTF-8. `write_file`
   normalizes incoming content to the existing file's EOL via `normalizeLineEndings`. Keep all
   write paths routed through these helpers when touching the editing tools.
+- **`replace_in_file` must normalize the *search* string's EOLs too, not just the replacement's.**
+  A multi-line search literal arrives LF-joined from the MCP client and silently matched nothing
+  against CRLF file content ("Replaced 0 occurrence(s)" despite the text existing). The literal
+  path now runs the needle through `normalizeLineEndings(search, sep)` before `Pattern.quote`;
+  the literal replacement also goes through `Matcher.quoteReplacement` (a `$`/`\` would
+  otherwise be taken as a group reference), the count comes from a real `Matcher` loop, and a
+  0-match call skips the `setContents` write entirely. Regex needles are the caller's job
+  (`\r?\n`).
+- **The ABL incremental builder skips files it considers unchanged, leaving stale state.** Two
+  field failures: (1) stale error markers persisted on a file whose only problem had been a
+  then-missing dependency that later built clean; (2) a dependent class kept compiling against
+  an interface's stale r-code after the interface was edited via the MCP edit tools. `build_file`
+  therefore calls `file.touch(monitor)` before the `INCREMENTAL_BUILD` so the requested file is
+  always in the build delta and really recompiles (regenerating its r-code). Keep the touch if
+  reworking the build tools.
+- **OpenEdge surfaces an interface/impl mismatch in a super class only when a subclass is
+  compiled.** A base class with the mismatch (e.g. accessor visibility: interface `GET. SET.`
+  vs class `PUBLIC GET. PUBLIC SET.`) fails with error 12918 ("Could not compile '<Base>',
+  which is a super class") pointing at the subclass's INHERITS line. On older PDSOE the super
+  builds clean standalone; on PDSOE 12.8 the super often surfaces its own error
+  (e.g. 12942) on the offending member too, so the 12918 is no longer reliably paired with a
+  clean super. Not fixable in the plugin; `collectMarkers` appends a diagnostic hint when a
+  12918 marker is present, worded to cover both cases (super clean vs super self-erroring).
 
 ## Runtime lifecycle
 
@@ -301,6 +324,14 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
   trailing-newline state, and Eclipse charset instead of forcing LF/UTF-8 - a forced-LF rewrite
   made SVN/Git report every line changed on CRLF files; see Gotchas). Same export-from-Eclipse +
   `gh release create` flow as v1.0.0.
+- [ ] Cut a `v1.2.2` GitHub Release (bugfixes, all verified live on PDSOE 12.8):
+  (1) `replace_in_file` now normalizes a literal multi-line search's EOLs so it matches CRLF
+  files instead of silently replacing 0 (and quotes `$`/`\` in literal replacements, skips the
+  write on a 0-match); (2) `build_file` touches the file before the incremental build so it
+  always recompiles - clearing stale markers and regenerating r-code a dependent then sees;
+  (3) `collectMarkers` appends a hint on error 12918 (super-class compile failure). Code +
+  docs are done and tested; remaining step is the export-from-Eclipse + `gh release create`
+  flow as v1.0.0 (bump is already `Bundle-Version: 1.2.2.qualifier`).
 - [ ] (maybe) Automated release on tag push - a `.github/workflows/release.yml` that fires on
   `v*` tags and cuts the GitHub Release. The blocker is there is **no headless build**: a PDE
   plugin needs a Tycho/Maven build to produce the JAR in CI, which means authoring a `pom.xml`

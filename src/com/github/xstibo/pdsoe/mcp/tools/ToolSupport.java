@@ -267,6 +267,7 @@ public final class ToolSupport {
             IMarker[] markers = resource.findMarkers(IMarker.PROBLEM, true, IResource.DEPTH_INFINITE);
             if (markers.length == 0) return "No problems found.";
             StringBuilder sb = new StringBuilder();
+            boolean superClassCompileError = false;
             for (IMarker m : markers) {
                 int severity = (Integer) m.getAttribute(IMarker.SEVERITY, IMarker.SEVERITY_INFO);
                 String label = switch (severity) {
@@ -275,9 +276,22 @@ public final class ToolSupport {
                     default -> "INFO";
                 };
                 String msg = (String) m.getAttribute(IMarker.MESSAGE, "");
+                if (msg.contains("(12918)")) superClassCompileError = true;
                 int line = (Integer) m.getAttribute(IMarker.LINE_NUMBER, 0);
                 String file = m.getResource().getProjectRelativePath().toString();
                 sb.append(label).append(" ").append(file).append(":").append(line).append(" ").append(msg).append("\n");
+            }
+            if (superClassCompileError) {
+                // The OpenEdge compiler validates an interface/implementation mismatch in a
+                // super class only when a subclass is compiled. The super may build clean on
+                // its own, or (on newer compilers) surface its own error on the offending member;
+                // either way the 12918 on the subclass points away from the real cause.
+                sb.append("\nHint: error 12918 (could not compile a super class) usually means an")
+                  .append(" interface/implementation mismatch inside that super class - a method-signature")
+                  .append(" or property accessor-visibility difference (e.g. interface 'GET. SET.' vs class")
+                  .append(" 'PUBLIC GET. PUBLIC SET.'). Build the super class on its own and compare it against")
+                  .append(" the interfaces it implements; it may also report its own error (e.g. 12942) on")
+                  .append(" the offending member.\n");
             }
             return sb.toString().trim();
         } catch (CoreException e) {

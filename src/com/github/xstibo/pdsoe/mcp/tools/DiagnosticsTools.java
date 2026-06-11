@@ -172,7 +172,8 @@ public class DiagnosticsTools implements ToolProvider {
     public AsyncToolSpecification buildFileTool() {
         McpSchema.Tool tool = McpSchema.Tool.builder()
             .name("build_file")
-            .description("Runs an incremental project build and returns markers (errors/warnings) for the specified file only.")
+            .description("Recompiles a specific file (always, even if unchanged) via an incremental project build "
+                + "and returns markers (errors/warnings) for that file only.")
             .inputSchema(new McpSchema.JsonSchema(
                 "object",
                 Map.of(
@@ -200,6 +201,11 @@ public class DiagnosticsTools implements ToolProvider {
                     @Override
                     public IStatus runInWorkspace(IProgressMonitor monitor) {
                         try {
+                            // Touch so the incremental builder cannot skip the file as
+                            // "unchanged". Without it, a file whose last compile failed only
+                            // because a dependency was missing keeps its stale error markers,
+                            // and a file edited outside the editor may keep stale r-code.
+                            file.touch(monitor);
                             project.build(IncrementalProjectBuilder.INCREMENTAL_BUILD, ABL_BUILDER_ID, null, monitor);
                             sink.success(result("OK\n\n" + collectMarkers(file)));
                         } catch (CoreException e) {

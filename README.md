@@ -137,7 +137,7 @@ Backed by ABL-compiler-generated `.xref.xml` files. Run `build_symbol_index` fir
 | `get_markers` | Returns all errors and warnings for a project |
 | `get_markers_for_file` | Returns errors and warnings for a specific file |
 | `build_project` | Triggers a full or incremental build; returns resulting markers |
-| `build_file` | Recompiles a single file via the ABL builder; returns only that file's markers |
+| `build_file` | Recompiles a single file via the ABL builder (always, even if unchanged); returns only that file's markers |
 | `clean_project` | Cleans a project (removes build output) and triggers a full rebuild |
 | `get_console_output` | Returns the content of the last active Eclipse console |
 
@@ -148,7 +148,7 @@ Backed by ABL-compiler-generated `.xref.xml` files. Run `build_symbol_index` fir
 | `write_file` | Writes content to a workspace file, creating it if it does not exist |
 | `insert_at_line` | Inserts text before a specific line |
 | `replace_lines` | Replaces a range of lines with new content |
-| `replace_in_file` | Finds and replaces text (or regex) in a file; returns replacement count |
+| `replace_in_file` | Finds and replaces text (or regex) in a file; literal searches match regardless of CRLF/LF differences; returns replacement count |
 | `delete_lines_in_file` | Deletes a range of lines from a file |
 | `apply_patch` | Applies a unified diff patch to a file |
 | `undo_edit` | Restores a file to its previous state via Eclipse local history |
@@ -162,6 +162,17 @@ _(Eclipse local-history snapshots via `IFile.getHistory()`)_
 | `list_file_history` | Lists local-history snapshots (index + timestamp) for a file |
 | `get_file_history_content` | Reads the content of a specific local-history snapshot by index |
 | `diff_file` | Shows a unified diff of the current file vs. a local-history snapshot |
+
+## Known limitations
+
+- **An interface/implementation mismatch in a base class surfaces when a subclass is compiled.**
+  Compiling a *subclass* of a base whose interface contract it violates (e.g. an
+  accessor-visibility mismatch, interface `GET. SET.` vs class `PUBLIC GET. PUBLIC SET.`) fails
+  with error 12918 ("Could not compile '&lt;Base&gt;', which is a super class") pointing at the
+  subclass's `INHERITS` line. Depending on the OpenEdge version the base may build clean on its
+  own or surface its own error (e.g. 12942) on the offending member. This is compiler behavior
+  the plugin cannot change; when `build_file` / `build_project` / `get_markers_for_file` see a
+  12918 marker they append a hint explaining where to look.
 
 ## How it works
 

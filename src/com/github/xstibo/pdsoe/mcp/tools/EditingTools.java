@@ -19,9 +19,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.countOccurrences;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.describe;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.detectFormat;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.ensureParentFolders;
@@ -243,14 +243,16 @@ public class EditingTools implements ToolProvider {
     public AsyncToolSpecification replaceInFileTool() {
         McpSchema.Tool tool = McpSchema.Tool.builder()
             .name("replace_in_file")
-            .description("Replaces occurrences of a search string (or regex) with replacement text in a workspace file")
+            .description("Replaces occurrences of a search string (or regex) with replacement text in a workspace file. "
+                + "Literal (non-regex) searches match regardless of CRLF/LF line-ending differences.")
             .inputSchema(new McpSchema.JsonSchema(
                 "object",
                 Map.of(
                     "project", Map.of("type", "string"),
                     "path", Map.of("type", "string"),
-                    "search", Map.of("type", "string", "description", "Text or regex to find"),
-                    "replace", Map.of("type", "string", "description", "Replacement text"),
+                    "search", Map.of("type", "string", "description",
+                        "Text or regex to find. Literal multi-line text matches across CRLF/LF differences; in regex mode use \\r?\\n to match line breaks."),
+                    "replace", Map.of("type", "string", "description", "Replacement text (literal unless regex=true; backreferences like $1 work only in regex mode)"),
                     "regex", Map.of("type", "boolean", "description", "Treat search as regex (default: false)"),
                     "all", Map.of("type", "boolean", "description", "Replace all occurrences (default: false = replace first only)")),
                 List.of("project", "path", "search", "replace"),
@@ -283,21 +285,34 @@ public class EditingTools implements ToolProvider {
                         try (InputStream is = file.getContents()) {
                             Charset cs = fileCharset(file);
                             String original = new String(is.readAllBytes(), cs);
-                            // Match the replacement's line endings to the file's so a multi-line
-                            // replacement does not inject lone LFs into a CRLF file.
+                            // Match the search's and replacement's line endings to the file's so a
+                            // multi-line literal still matches a CRLF file and a multi-line
+                            // replacement does not inject lone LFs into it (see Gotchas).
                             String sep = original.contains("\r\n") ? "\r\n"
                                 : original.indexOf('\r') >= 0 ? "\r" : "\n";
                             String safeReplace = normalizeLineEndings(replace, sep);
                             Pattern p = useRegex ? Pattern.compile(search)
-                                : Pattern.compile(Pattern.quote(search));
+                                : Pattern.compile(Pattern.quote(normalizeLineEndings(search, sep)));
                             boolean replaceAll = Boolean.TRUE.equals(req.arguments().get("all"));
+                            Matcher counter = p.matcher(original);
+                            int count = 0;
+                            while (counter.find()) count++;
+                            if (count == 0) {
+                                // Do not rewrite the file with identical content; that would dirty
+                                // the modification stamp and trigger a pointless rebuild.
+                                sink.success(result("Replaced 0 occurrence(s): search text not found."
+                                    + (useRegex ? " Hint: in regex mode use \\r?\\n to match line breaks." : "")));
+                                return Status.OK_STATUS;
+                            }
+                            // quoteReplacement so a literal replacement containing '$' or '\' is
+                            // not interpreted as a group reference; regex mode keeps backreferences.
+                            String rep = useRegex ? safeReplace : Matcher.quoteReplacement(safeReplace);
                             String updated = replaceAll
-                                ? p.matcher(original).replaceAll(safeReplace)
-                                : p.matcher(original).replaceFirst(safeReplace);
-                            int count = countOccurrences(original, search);
+                                ? p.matcher(original).replaceAll(rep)
+                                : p.matcher(original).replaceFirst(rep);
                             byte[] bytes = updated.getBytes(cs);
                             file.setContents(new ByteArrayInputStream(bytes), IResource.KEEP_HISTORY, monitor);
-                            sink.success(result("Replaced " + (replaceAll ? count : Math.min(count, 1)) + " occurrence(s)"));
+                            sink.success(result("Replaced " + (replaceAll ? count : 1) + " occurrence(s)"));
                         } catch (Exception e) {
                             sink.success(error(describe(e)));
                         }
