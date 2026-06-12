@@ -163,17 +163,6 @@ _(Eclipse local-history snapshots via `IFile.getHistory()`)_
 | `get_file_history_content` | Reads the content of a specific local-history snapshot by index |
 | `diff_file` | Shows a unified diff of the current file vs. a local-history snapshot |
 
-## Known limitations
-
-- **An interface/implementation mismatch in a base class surfaces when a subclass is compiled.**
-  Compiling a *subclass* of a base whose interface contract it violates (e.g. an
-  accessor-visibility mismatch, interface `GET. SET.` vs class `PUBLIC GET. PUBLIC SET.`) fails
-  with error 12918 ("Could not compile '&lt;Base&gt;', which is a super class") pointing at the
-  subclass's `INHERITS` line. Depending on the OpenEdge version the base may build clean on its
-  own or surface its own error (e.g. 12942) on the offending member. This is compiler behavior
-  the plugin cannot change; when `build_file` / `build_project` / `get_markers_for_file` see a
-  12918 marker they append a hint explaining where to look.
-
 ## How it works
 
 Three components:
