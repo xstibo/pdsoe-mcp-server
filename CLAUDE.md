@@ -324,14 +324,14 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
   trailing-newline state, and Eclipse charset instead of forcing LF/UTF-8 - a forced-LF rewrite
   made SVN/Git report every line changed on CRLF files; see Gotchas). Same export-from-Eclipse +
   `gh release create` flow as v1.0.0.
-- [ ] Cut a `v1.2.2` GitHub Release (bugfixes, all verified live on PDSOE 12.8):
+- [x] Cut a `v1.2.2` GitHub Release (bugfixes, all verified live on PDSOE 12.8):
   (1) `replace_in_file` now normalizes a literal multi-line search's EOLs so it matches CRLF
   files instead of silently replacing 0 (and quotes `$`/`\` in literal replacements, skips the
   write on a 0-match); (2) `build_file` touches the file before the incremental build so it
   always recompiles - clearing stale markers and regenerating r-code a dependent then sees;
-  (3) `collectMarkers` appends a hint on error 12918 (super-class compile failure). Code +
-  docs are done and tested; remaining step is the export-from-Eclipse + `gh release create`
-  flow as v1.0.0 (bump is already `Bundle-Version: 1.2.2.qualifier`).
+  (3) `collectMarkers` appends a hint on error 12918 (super-class compile failure). Same
+  export-from-Eclipse + `gh release create` flow as v1.0.0
+  (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.2.2).
 - [ ] (maybe) Automated release on tag push - a `.github/workflows/release.yml` that fires on
   `v*` tags and cuts the GitHub Release. The blocker is there is **no headless build**: a PDE
   plugin needs a Tycho/Maven build to produce the JAR in CI, which means authoring a `pom.xml`
