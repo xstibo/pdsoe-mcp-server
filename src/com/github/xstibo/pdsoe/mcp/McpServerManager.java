@@ -9,6 +9,7 @@ import com.github.xstibo.pdsoe.mcp.tools.EditingTools;
 import com.github.xstibo.pdsoe.mcp.tools.EditorStateTools;
 import com.github.xstibo.pdsoe.mcp.tools.FileHistoryTools;
 import com.github.xstibo.pdsoe.mcp.tools.ReadingTools;
+import com.github.xstibo.pdsoe.mcp.tools.SvnTools;
 import com.github.xstibo.pdsoe.mcp.tools.ToolProvider;
 import com.github.xstibo.pdsoe.mcp.tools.WorkspaceTools;
 import com.github.xstibo.pdsoe.mcp.tools.symbol.SymbolGraphTools;
@@ -40,7 +41,8 @@ public class McpServerManager {
         new EditorStateTools(),
         new DiagnosticsTools(),
         new EditingTools(),
-        new FileHistoryTools());
+        new FileHistoryTools(),
+        new SvnTools());
 
     /** A tool's name + description, for the preference page's filtering tree. */
     public record ToolInfo(String name, String description) {

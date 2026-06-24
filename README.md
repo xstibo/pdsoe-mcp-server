@@ -19,7 +19,7 @@ Once installed, AI assistants can interact with your PDSOE workspace directly �
 Download the latest `com.github.xstibo.pdsoe.mcp_<version>.jar` from the
 [**Releases**](../../releases) page and drop it into your PDSOE installation's `dropins/` folder
 (delete any older copy first), then restart PDSOE. Confirm startup via **Window → Show View →
-Error Log** — you should see `PDSOE MCP Server started on http://127.0.0.1:8123/mcp (52 tools)`.
+Error Log** — you should see `PDSOE MCP Server started on http://127.0.0.1:8123/mcp (53 tools)`.
 
 ## Building from source
 
@@ -31,7 +31,7 @@ This is an Eclipse PDE project — there's no Maven/Gradle/CLI build; everything
    - **Develop / smoke-test** — **Run → Run As → Eclipse Application** launches a child IDE with the plugin active.
    - **Install into your PDSOE** — **File → Export → Plug-in Development → Deployable plug-ins and fragments**, select `com.github.xstibo.pdsoe.mcp`, and finish to produce `plugins/com.github.xstibo.pdsoe.mcp_<version>.jar`. Drop that JAR into your PDSOE installation's `dropins/` folder (delete any older copy first — the version qualifier changes each export) and restart PDSOE.
 
-Either way, confirm startup via **Window → Show View → Error Log** — you should see `PDSOE MCP Server started on http://127.0.0.1:8123/mcp (52 tools)`.
+Either way, confirm startup via **Window → Show View → Error Log** — you should see `PDSOE MCP Server started on http://127.0.0.1:8123/mcp (53 tools)`.
 
 ## Connecting Claude Code
 
@@ -70,7 +70,7 @@ Changes take effect when you press **Apply** (or **Apply and Close**) — no IDE
 
 ## Available tools
 
-52 tools across workspace navigation, code reading, the cross-reference symbol graph, editor state, diagnostics & build, code editing, and file history.
+53 tools across workspace navigation, code reading, the cross-reference symbol graph, editor state, diagnostics & build, code editing, file history, and version control.
 
 ### Workspace & file navigation
 
@@ -163,6 +163,14 @@ _(Eclipse local-history snapshots via `IFile.getHistory()`)_
 | `get_file_history_content` | Reads the content of a specific local-history snapshot by index |
 | `diff_file` | Shows a unified diff of the current file vs. a local-history snapshot |
 
+### Version control (SVN)
+
+_(Shells out to the `svn` command-line client, which must be on the PATH, run in the project's working copy)_
+
+| Tool | Description |
+|---|---|
+| `svn_diff` | Runs `svn diff` on a project's working copy; optional `path` narrows it to a file/folder and `revision` is passed to `svn -r` (e.g. `BASE`, `HEAD`, `1234`, `1200:HEAD`) |
+
 ## How it works
 
 Three components:
@@ -193,7 +201,7 @@ Each provider implements `ToolProvider`; `McpServerManager` flat-maps over the l
 
 ## Roadmap
 
-Working today: all 52 tools above, async/non-blocking handlers, ABL [proparse](https://github.com/Riverside-Software/proparse) integration, the cross-reference symbol graph, single-file builds, and JAR export/install — verified in a real PDSOE 12.8 instance.
+Working today: all 53 tools above, async/non-blocking handlers, ABL [proparse](https://github.com/Riverside-Software/proparse) integration, the cross-reference symbol graph, single-file builds, and JAR export/install — verified in a real PDSOE 12.8 instance.
 
 Planned:
 

@@ -15,7 +15,7 @@ AI assistants can interact with ABL (OpenEdge ABL) projects.
 
 ## Status
 
-52 MCP tools, split by domain into `ToolProvider` classes (see Architecture; the original
+53 MCP tools, split by domain into `ToolProvider` classes (see Architecture; the original
 monolithic `AblTools` was refactored away). Compiles clean, runs in PDSOE, and is verified
 live against PDSOE 12.8 on a large production ABL project.
 No known open bugs. Published (MIT) at https://github.com/xstibo/pdsoe-mcp-server as a single
@@ -72,7 +72,7 @@ subpackages:
 |---|---|
 | `ToolProvider.java` | Interface: `List<AsyncToolSpecification> tools()` plus `String domain()` (a human-readable label used to group the provider's tools in the preference page's tool-filtering tree). One implementation per domain. |
 | `ToolSupport.java` | Stateless shared helpers (statically imported): `result`/`error`/`param`/`require`, `resolveProject`/`resolveFile`/`requireContainedPath`/`resolveEditorFile`, `readPropath`, small-file IO, marker collection, a JSON-schema DSL (`tool(...)`, `str()`/`bool()`/`integer()`), the hardened XXE-safe `parseXml`, and shared constants (`MAX_READ_BYTES`, `MAX_SEARCH_MATCHES`, `ABL_BUILDER_ID`). |
-| `WorkspaceTools` (18), `ReadingTools` (6), `EditorStateTools` (7), `DiagnosticsTools` (6), `EditingTools` (7), `FileHistoryTools` (3) | The 52 tools grouped by the categories below; each calls Eclipse workspace APIs (`IProject`, `IFile`, `IMarker`, `WorkspaceJob`). |
+| `WorkspaceTools` (18), `ReadingTools` (6), `EditorStateTools` (7), `DiagnosticsTools` (6), `EditingTools` (7), `FileHistoryTools` (3), `SvnTools` (1) | The 53 tools grouped by the categories below; each calls Eclipse workspace APIs (`IProject`, `IFile`, `IMarker`, `WorkspaceJob`). `SvnTools` is the exception: it shells out to the `svn` CLI (see below). |
 | `tools/symbol/` | `SymbolGraphTools` (5 tools) plus its package-private data types `RunRef`/`InvokeRef`/`XrefRecord`/`SymbolIndex`. Owns the per-project in-memory index (`SymbolGraphTools.projectIndices`, a `ConcurrentHashMap`). |
 
 **Preferences** — `src/com/github/xstibo/pdsoe/mcp/preferences/`:
@@ -95,7 +95,7 @@ is required for `IFileEditorInput` (a split package — the interface ships in `
 ## MCP tools
 
 **The full per-tool list lives in `README.md` (Available tools) - that is the single source
-of truth; update it when tools change.** The seven domains, their provider class, and the
+of truth; update it when tools change.** The eight domains, their provider class, and the
 Eclipse API each is built on:
 
 | Domain | Provider (count) | Built on |
@@ -107,6 +107,7 @@ Eclipse API each is built on:
 | Diagnostics & build | `DiagnosticsTools` (6) | `IMarker` + `WorkspaceJob` |
 | Code editing | `EditingTools` (7) | `IFile.setContents()` + Eclipse local history |
 | File history | `FileHistoryTools` (3) | Eclipse local history |
+| Version control (SVN) | `SvnTools` (1) | `svn` CLI on the PATH, run in the project's working copy |
 
 ### Not feasible (no public PDSOE API)
 - **PROPATH-aware name resolution** (resolving `RUN procedure-name` without `.p` to a specific
@@ -242,7 +243,7 @@ deterministic (`ServerConnector` defaults to `SO_REUSEADDR`).
 
 **Single MCP server, single endpoint** — all tools operate on one domain (the ABL workspace),
 so one server at `/mcp` is simpler than splitting into multiple logical servers. The set has
-grown to ~52 tools without navigation problems; revisit only if it grows much larger.
+grown to ~53 tools without navigation problems; revisit only if it grows much larger.
 
 **Loopback-only bind, no authorization token** — binds to `127.0.0.1`, so it's not
 network-reachable. A token would add `claude mcp add` friction with no security benefit on a
@@ -266,6 +267,15 @@ the *default* port (overridden by a saved preference). The bind address is inten
 preference (loopback-only — see above). Per-project/per-path file access control was
 considered and **decided against** (see Roadmap): on a loopback single-user server it is a
 guard rail, not a security control, so it is not worth the added complexity.
+
+**Version control via the `svn` CLI, not an Eclipse SVN integration** — `SvnTools` shells out to
+the `svn` command-line client (run with the Eclipse project's on-disk location as the working
+directory) rather than depending on Subversive/Subclipse, whose Java APIs are neither public nor
+stable across PDSOE installs. The CLI is the one interface every SVN setup has. Trade-off: `svn`
+must be on the PATH (a clear error is returned if it is not). The process is drained on a separate
+thread (so a large diff cannot deadlock on a full pipe buffer), killed past a 120s timeout, and its
+output capped at `MAX_READ_BYTES`. Read-only so far (`svn_diff`); the same shell-out pattern can
+add `svn status` / `svn log` later.
 
 ### Symbol graph
 
