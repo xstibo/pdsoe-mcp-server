@@ -253,7 +253,9 @@ public class DiagnosticsTools implements ToolProvider {
                         return Status.OK_STATUS;
                     }
                 };
-                job.setRule(project);
+                // CLEAN_BUILD triggers the ABL builder, which acquires the workspace-root
+                // rule (R/); a narrower project rule (P/<project>) cannot nest inside it.
+                job.setRule(ResourcesPlugin.getWorkspace().getRoot());
                 job.schedule();
             });
         });

@@ -160,7 +160,10 @@ Durable findings (verified against PDSOE 12.8 on a large production ABL project)
   `ref.getElementsByTagName("Line-num").item(0).getTextContent()`.
 - **Build jobs must use the workspace-root scheduling rule**, not a project rule — the ABL
   builder acquires the root rule (`R/`), which cannot nest inside a narrower `P/<project>` rule.
-  Use `ResourcesPlugin.getWorkspace().getRoot()` as the `WorkspaceJob` rule.
+  Use `ResourcesPlugin.getWorkspace().getRoot()` as the `WorkspaceJob` rule. This applies to
+  `CLEAN_BUILD` too: `clean_project` originally set a `P/<project>` rule and threw
+  `Attempted to beginRule: R/, does not match outer scope rule: P/<project>` at runtime
+  (fixed in v1.2.3) — any tool that calls `project.build(...)` needs the root rule.
 - **PDSOE's ABL editor input is `IFileEditorInput`, not `IAdaptable`** — `getAdapter(IFile.class)`
   returns null. Resolve via `ToolSupport.resolveEditorFile` (`instanceof IFileEditorInput`).
 - **`IFileEditorInput` lives in the `org.eclipse.ui.ide` bundle** (split package); it must be in
@@ -332,6 +335,12 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
   (3) `collectMarkers` appends a hint on error 12918 (super-class compile failure). Same
   export-from-Eclipse + `gh release create` flow as v1.0.0
   (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.2.2).
+- [ ] Cut a `v1.2.3` GitHub Release (bugfix): `clean_project` set a project scheduling rule
+  (`P/<project>`), but its `CLEAN_BUILD` runs the ABL builder, which acquires the workspace-root
+  rule (`R/`) - the narrower project rule cannot nest inside it, so the tool threw
+  `Attempted to beginRule: R/, does not match outer scope rule: P/<project>`. Now uses
+  `ResourcesPlugin.getWorkspace().getRoot()` like the other build tools. Same export-from-Eclipse
+  + `gh release create` flow as v1.0.0.
 - [ ] (maybe) Automated release on tag push - a `.github/workflows/release.yml` that fires on
   `v*` tags and cuts the GitHub Release. The blocker is there is **no headless build**: a PDE
   plugin needs a Tycho/Maven build to produce the JAR in CI, which means authoring a `pom.xml`
