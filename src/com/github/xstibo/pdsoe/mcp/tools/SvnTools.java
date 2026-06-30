@@ -21,15 +21,19 @@ import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.error;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.param;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.requireContainedPath;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.resolveProject;
+import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.resolveSvnExecutable;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.result;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.str;
+import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.svnNotFoundMessage;
 import static com.github.xstibo.pdsoe.mcp.tools.ToolSupport.tool;
 
 /**
  * Version-control tools backed by the {@code svn} command-line client. The plugin shells out
- * to {@code svn} (which must be on the PATH) rather than depending on a particular Eclipse SVN
- * integration (Subversive/Subclipse), whose APIs are not stable/public. Read-only so far:
- * the working copy is the Eclipse project's on-disk location.
+ * to {@code svn} rather than depending on a particular Eclipse SVN integration
+ * (Subversive/Subclipse), whose APIs are not stable/public. The executable is resolved by
+ * {@link ToolSupport#resolveSvnExecutable()} (configured preference -> PATH -> well-known
+ * install locations), so it need not be on the PATH. Read-only so far: the working copy is
+ * the Eclipse project's on-disk location.
  */
 public class SvnTools implements ToolProvider {
 
@@ -83,8 +87,12 @@ public class SvnTools implements ToolProvider {
             }
             String revision = param(req.arguments(), "revision");
 
+            String svn = resolveSvnExecutable();
+            if (svn == null)
+                return Mono.just(error(svnNotFoundMessage()));
+
             List<String> cmd = new ArrayList<>();
-            cmd.add("svn");
+            cmd.add(svn);
             cmd.add("diff");
             if (revision != null && !revision.isBlank()) {
                 cmd.add("-r");
@@ -111,8 +119,8 @@ public class SvnTools implements ToolProvider {
         try {
             proc = pb.start();
         } catch (IOException e) {
-            return error("Could not run 'svn' (is the Subversion command-line client on the PATH?): "
-                + e.getMessage());
+            return error("Could not run svn (" + cmd.get(0) + "): " + e.getMessage()
+                + "\nCheck the svn path under Window > Preferences > PDSOE MCP Server (Version Control).");
         }
 
         StringBuilder out = new StringBuilder();

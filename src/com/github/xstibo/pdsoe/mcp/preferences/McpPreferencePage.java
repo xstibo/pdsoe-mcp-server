@@ -3,6 +3,7 @@ package com.github.xstibo.pdsoe.mcp.preferences;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_DISABLED_TOOLS;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_ENABLED;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_PORT;
+import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SVN_EXECUTABLE;
 
 import org.eclipse.core.runtime.jobs.Job;
 import org.eclipse.jface.dialogs.MessageDialog;
@@ -19,6 +20,7 @@ import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Control;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.FileDialog;
 import org.eclipse.swt.widgets.Group;
 import org.eclipse.swt.widgets.Label;
 import org.eclipse.swt.widgets.Shell;
@@ -58,6 +60,7 @@ public class McpPreferencePage extends PreferencePage implements IWorkbenchPrefe
     private Button enableButton;
     private Text portText;
     private Label statusLabel;
+    private Text svnText;
 
     private CheckboxTreeViewer toolsViewer;
     /** domain label -> tools in that domain, in registration order. */
@@ -122,12 +125,59 @@ public class McpPreferencePage extends PreferencePage implements IWorkbenchPrefe
         statusLabel = new Label(status, SWT.NONE);
         statusLabel.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
 
+        // --- Version Control ------------------------------------------------------
+        createVersionControlGroup(top, store);
+
         // --- Tools ----------------------------------------------------------------
         createToolsGroup(top, store);
 
         refreshStatus(null);
         validate();
         return top;
+    }
+
+    /** Build the "Version Control" section: the optional path to the svn executable. */
+    private void createVersionControlGroup(Composite top, IPreferenceStore store) {
+        Group vc = new Group(top, SWT.NONE);
+        vc.setText("Version Control");
+        GridLayout layout = new GridLayout(3, false);
+        layout.marginWidth = 10;
+        layout.marginHeight = 10;
+        layout.horizontalSpacing = 8;
+        layout.verticalSpacing = 8;
+        vc.setLayout(layout);
+        vc.setLayoutData(new GridData(SWT.FILL, SWT.TOP, true, false));
+
+        Label label = new Label(vc, SWT.NONE);
+        label.setText("svn executable:");
+        label.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false));
+
+        svnText = new Text(vc, SWT.BORDER | SWT.SINGLE);
+        svnText.setLayoutData(new GridData(SWT.FILL, SWT.CENTER, true, false));
+        svnText.setText(store.getString(KEY_SVN_EXECUTABLE));
+        svnText.setToolTipText("Full path to the Subversion command-line client. "
+            + "Leave empty to auto-detect (PATH, then common install locations).");
+
+        Button browse = new Button(vc, SWT.PUSH);
+        browse.setText("Browse...");
+        browse.setLayoutData(new GridData(SWT.LEFT, SWT.CENTER, false, false));
+        browse.addListener(SWT.Selection, e -> {
+            FileDialog dialog = new FileDialog(browse.getShell(), SWT.OPEN);
+            dialog.setText("Select the svn executable");
+            String current = svnText.getText().trim();
+            if (!current.isEmpty()) dialog.setFileName(current);
+            String chosen = dialog.open();
+            if (chosen != null) svnText.setText(chosen);
+        });
+
+        Label hint = new Label(vc, SWT.WRAP);
+        hint.setText("Optional. If empty, the server looks for 'svn' on the PATH, then at "
+            + "common install locations (TortoiseSVN, SlikSVN, ...). Set this if svn is "
+            + "installed elsewhere or not on the PATH.");
+        GridData hintGd = new GridData(SWT.FILL, SWT.TOP, true, false);
+        hintGd.horizontalSpan = 3;
+        hintGd.widthHint = 360;
+        hint.setLayoutData(hintGd);
     }
 
     /** Build the "Tools" section: a checkbox tree of domains and their tools. */
@@ -304,6 +354,8 @@ public class McpPreferencePage extends PreferencePage implements IWorkbenchPrefe
         store.setValue(KEY_SERVER_PORT, Integer.parseInt(portText.getText().trim()));
         // Persist the disabled set sorted, so the stored value is stable/diff-friendly.
         store.setValue(KEY_DISABLED_TOOLS, String.join(",", new TreeSet<>(disabledTools)));
+        // The svn path is read by the tool at call time; persisting it is enough (no reconcile).
+        store.setValue(KEY_SVN_EXECUTABLE, svnText.getText().trim());
         // Capture the main workbench window shell + its display now: both outlive
         // this preference dialog, so feedback still works on "Apply and Close"
         // (which disposes this page and its statusLabel before the Job finishes).
@@ -317,6 +369,9 @@ public class McpPreferencePage extends PreferencePage implements IWorkbenchPrefe
         IPreferenceStore store = getPreferenceStore();
         enableButton.setSelection(store.getDefaultBoolean(KEY_SERVER_ENABLED));
         portText.setText(Integer.toString(store.getDefaultInt(KEY_SERVER_PORT)));
+        if (svnText != null) {
+            svnText.setText(store.getDefaultString(KEY_SVN_EXECUTABLE));
+        }
         // Default is "no tools disabled" - re-check everything in the tree.
         disabledTools.clear();
         if (toolsViewer != null) {

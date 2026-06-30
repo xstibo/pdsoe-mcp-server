@@ -3,6 +3,7 @@ package com.github.xstibo.pdsoe.mcp.preferences;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_DISABLED_TOOLS;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_ENABLED;
 import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SERVER_PORT;
+import static com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants.KEY_SVN_EXECUTABLE;
 
 import org.eclipse.core.runtime.preferences.AbstractPreferenceInitializer;
 import org.eclipse.core.runtime.preferences.DefaultScope;
@@ -30,5 +31,7 @@ public class PreferenceInitializer extends AbstractPreferenceInitializer {
         defaults.putInt(KEY_SERVER_PORT, Integer.getInteger("pdsoe.mcp.port", 8123));
         // No tools disabled by default - the whole set is registered.
         defaults.put(KEY_DISABLED_TOOLS, "");
+        // Empty = auto-detect the svn client (PATH, then well-known locations).
+        defaults.put(KEY_SVN_EXECUTABLE, "");
     }
 }

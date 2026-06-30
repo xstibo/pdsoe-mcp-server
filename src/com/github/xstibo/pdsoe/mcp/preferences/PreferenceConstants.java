@@ -20,6 +20,13 @@ public final class PreferenceConstants {
      */
     public static final String KEY_DISABLED_TOOLS = "tools.disabled";
 
+    /**
+     * Full path to the Subversion command-line executable used by the SVN tools.
+     * String; default "" (empty), which means auto-detect: try "svn" on the PATH,
+     * then well-known install locations. A non-empty value overrides that lookup.
+     */
+    public static final String KEY_SVN_EXECUTABLE = "svn.executable";
+
     private PreferenceConstants() {
     }
 }

@@ -11,12 +11,23 @@ import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
 import org.eclipse.core.runtime.IStatus;
 import org.eclipse.core.runtime.Status;
+import org.eclipse.core.commands.Command;
+import org.eclipse.core.commands.ParameterizedCommand;
+import org.eclipse.core.expressions.EvaluationContext;
+import org.eclipse.core.expressions.IEvaluationContext;
 import org.eclipse.jface.text.IDocument;
+import org.eclipse.jface.viewers.IStructuredSelection;
+import org.eclipse.jface.viewers.StructuredSelection;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.ui.ISources;
+import org.eclipse.ui.IWorkbench;
+import org.eclipse.ui.PlatformUI;
+import org.eclipse.ui.commands.ICommandService;
 import org.eclipse.ui.console.ConsolePlugin;
 import org.eclipse.ui.console.IConsole;
 import org.eclipse.ui.console.IConsoleManager;
 import org.eclipse.ui.console.MessageConsole;
+import org.eclipse.ui.handlers.IHandlerService;
 import reactor.core.publisher.Mono;
 
 import java.util.List;
@@ -42,7 +53,7 @@ public class DiagnosticsTools implements ToolProvider {
     @Override
     public List<AsyncToolSpecification> tools() {
         return List.of(getMarkersTool(), getMarkersForFileTool(), buildProjectTool(),
-            buildFileTool(), cleanProjectTool(), getConsoleOutputTool());
+            buildFileTool(), cleanProjectTool(), rebuildFilesWithErrorsTool(), getConsoleOutputTool());
     }
 
     public AsyncToolSpecification buildProjectTool() {
@@ -258,6 +269,75 @@ public class DiagnosticsTools implements ToolProvider {
                 job.setRule(ResourcesPlugin.getWorkspace().getRoot());
                 job.schedule();
             });
+        });
+    }
+
+    public AsyncToolSpecification rebuildFilesWithErrorsTool() {
+        McpSchema.Tool tool = McpSchema.Tool.builder()
+            .name("rebuild_files_with_errors")
+            .description("Recompiles every file in the project that currently has an error marker, by "
+                + "triggering PDSOE's own 'Recompile Files that Have Errors' command (the project-scoped "
+                + "OpenEdge action). The recompile runs as a background build job, so call get_markers "
+                + "afterwards to see the result.")
+            .inputSchema(new McpSchema.JsonSchema(
+                "object",
+                Map.of(
+                    "project", Map.of("type", "string"),
+                    "command_id", Map.of("type", "string", "description",
+                        "Optional override for the OpenEdge command id "
+                            + "(default: com.openedge.pdt.text.compilefileswitherror)")),
+                List.of("project"), null, null, null))
+            .build();
+
+        return new AsyncToolSpecification(tool, (exchange, req) -> {
+            String projectName = param(req.arguments(), "project");
+            if (projectName == null || projectName.isBlank()) return Mono.just(error("project is required"));
+            IProject project;
+            try {
+                project = resolveProject(projectName);
+            } catch (IllegalArgumentException e) {
+                return Mono.just(error(e.getMessage()));
+            }
+            String override = param(req.arguments(), "command_id");
+            String commandId = (override == null || override.isBlank())
+                ? "com.openedge.pdt.text.compilefileswitherror"
+                : override;
+
+            McpSchema.CallToolResult[] holder = new McpSchema.CallToolResult[1];
+            Display.getDefault().syncExec(() -> {
+                try {
+                    IWorkbench wb = PlatformUI.getWorkbench();
+                    ICommandService commandService = wb.getService(ICommandService.class);
+                    IHandlerService handlerService = wb.getService(IHandlerService.class);
+                    if (commandService == null || handlerService == null) {
+                        holder[0] = error("Workbench command services are unavailable");
+                        return;
+                    }
+                    Command command = commandService.getCommand(commandId);
+                    if (!command.isDefined()) {
+                        holder[0] = error("Command not found: " + commandId
+                            + " (the OpenEdge PDT text plugin must be installed - is this PDSOE?)");
+                        return;
+                    }
+                    // The OpenEdge handler recompiles the error files of the selected resource(s);
+                    // its menu visibleWhen requires a selection that iterates IResource. Supply the
+                    // project as the active selection so the command targets exactly that project.
+                    IStructuredSelection selection = new StructuredSelection(project);
+                    IEvaluationContext context =
+                        new EvaluationContext(handlerService.createContextSnapshot(true), selection);
+                    context.addVariable(ISources.ACTIVE_CURRENT_SELECTION_NAME, selection);
+                    context.setAllowPluginActivation(true);
+
+                    ParameterizedCommand pc = new ParameterizedCommand(command, null);
+                    handlerService.executeCommandInContext(pc, null, context);
+                    holder[0] = result("Triggered '" + command.getName() + "' (" + commandId
+                        + ") for project " + project.getName()
+                        + ". The recompile runs as a background build job; call get_markers to see the result.");
+                } catch (Exception e) {
+                    holder[0] = error("Failed to run command " + commandId + ": " + describe(e));
+                }
+            });
+            return Mono.just(holder[0]);
         });
     }
 }

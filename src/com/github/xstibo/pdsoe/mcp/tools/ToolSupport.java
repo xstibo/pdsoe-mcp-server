@@ -15,11 +15,15 @@ import org.eclipse.ui.IFileEditorInput;
 import org.w3c.dom.Document;
 import org.xml.sax.SAXException;
 
+import com.github.xstibo.pdsoe.mcp.Activator;
+import com.github.xstibo.pdsoe.mcp.preferences.PreferenceConstants;
+
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import java.io.BufferedInputStream;
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -330,6 +334,96 @@ public final class ToolSupport {
     /** Builds a tool that takes no arguments. */
     public static McpSchema.Tool tool(String name, String description) {
         return tool(name, description, Map.of(), null);
+    }
+
+    // --- svn executable resolution ------------------------------------------
+
+    /**
+     * Resolves the Subversion command-line executable to run, in priority order:
+     * (1) the configured {@code svn.executable} preference, when it points at a real
+     * file; (2) the platform "svn" found on the {@code PATH}; (3) a well-known install
+     * location ({@link #svnProbeLocations()}). Returns null if none is found - callers
+     * should surface {@link #svnNotFoundMessage()} to the user.
+     *
+     * <p>Using absolute paths from (3) sidesteps the "IDE inherited a stale PATH at
+     * startup" problem: a freshly installed svn is found without restarting the IDE.
+     */
+    public static String resolveSvnExecutable() {
+        String configured = Activator.getDefault().getPreferenceStore()
+            .getString(PreferenceConstants.KEY_SVN_EXECUTABLE);
+        if (configured != null && !configured.isBlank()) {
+            File f = new File(configured.trim());
+            if (f.isFile()) return f.getAbsolutePath();
+            // Configured but missing: fall through to auto-detection rather than hard-fail.
+        }
+        String onPath = findExecutableOnPath(svnExeName());
+        if (onPath != null) return onPath;
+        for (String candidate : svnProbeLocations()) {
+            if (new File(candidate).isFile()) return candidate;
+        }
+        return null;
+    }
+
+    /** User-facing message describing how svn was looked for and how to fix a miss. */
+    public static String svnNotFoundMessage() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Could not find the Subversion command-line client ('")
+          .append(svnExeName()).append("'). Looked on the PATH and at:\n");
+        for (String candidate : svnProbeLocations()) {
+            sb.append("  ").append(candidate).append("\n");
+        }
+        sb.append("\nTo fix, do one of:\n")
+          .append("  - Install a Subversion CLI (e.g. SlikSVN, or enable TortoiseSVN's\n")
+          .append("    'command line client tools' component), then restart the IDE.\n")
+          .append("  - Set the full path to svn under Window > Preferences > PDSOE MCP Server\n")
+          .append("    (Version Control).\n")
+          .append("Note: the IDE inherits the PATH from when it started - if svn was just\n")
+          .append("installed and is on the PATH, restart the IDE (or set the path above).");
+        return sb.toString();
+    }
+
+    private static String svnExeName() {
+        return isWindowsOs() ? "svn.exe" : "svn";
+    }
+
+    private static boolean isWindowsOs() {
+        return System.getProperty("os.name", "").toLowerCase().contains("win");
+    }
+
+    /** Scans the {@code PATH} for an executable, returning its absolute path or null. */
+    private static String findExecutableOnPath(String exe) {
+        String path = System.getenv("PATH");
+        if (path == null) return null;
+        for (String dir : path.split(File.pathSeparator)) {
+            if (dir.isBlank()) continue;
+            File f = new File(dir.trim(), exe);
+            if (f.isFile()) return f.getAbsolutePath();
+        }
+        return null;
+    }
+
+    /** Well-known absolute locations of the svn client, OS-specific (for probing + diagnostics). */
+    public static List<String> svnProbeLocations() {
+        List<String> out = new ArrayList<>();
+        if (isWindowsOs()) {
+            String pf = System.getenv("ProgramFiles");
+            String pfx86 = System.getenv("ProgramFiles(x86)");
+            if (pf == null || pf.isBlank()) pf = "C:\\Program Files";
+            if (pfx86 == null || pfx86.isBlank()) pfx86 = "C:\\Program Files (x86)";
+            for (String base : new String[] { pf, pfx86 }) {
+                out.add(base + "\\TortoiseSVN\\bin\\svn.exe");
+                out.add(base + "\\SlikSvn\\bin\\svn.exe");
+                out.add(base + "\\Subversion\\bin\\svn.exe");
+                out.add(base + "\\CollabNet\\Subversion Client\\svn.exe");
+                out.add(base + "\\VisualSVN\\bin\\svn.exe");
+            }
+        } else {
+            out.add("/usr/bin/svn");
+            out.add("/usr/local/bin/svn");
+            out.add("/opt/homebrew/bin/svn");
+            out.add("/opt/local/bin/svn");
+        }
+        return out;
     }
 
     // --- hardened XML -------------------------------------------------------

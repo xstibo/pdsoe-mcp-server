@@ -15,7 +15,7 @@ AI assistants can interact with ABL (OpenEdge ABL) projects.
 
 ## Status
 
-53 MCP tools, split by domain into `ToolProvider` classes (see Architecture; the original
+54 MCP tools, split by domain into `ToolProvider` classes (see Architecture; the original
 monolithic `AblTools` was refactored away). Compiles clean, runs in PDSOE, and is verified
 live against PDSOE 12.8 on a large production ABL project.
 No known open bugs. Published (MIT) at https://github.com/xstibo/pdsoe-mcp-server as a single
@@ -72,16 +72,16 @@ subpackages:
 |---|---|
 | `ToolProvider.java` | Interface: `List<AsyncToolSpecification> tools()` plus `String domain()` (a human-readable label used to group the provider's tools in the preference page's tool-filtering tree). One implementation per domain. |
 | `ToolSupport.java` | Stateless shared helpers (statically imported): `result`/`error`/`param`/`require`, `resolveProject`/`resolveFile`/`requireContainedPath`/`resolveEditorFile`, `readPropath`, small-file IO, marker collection, a JSON-schema DSL (`tool(...)`, `str()`/`bool()`/`integer()`), the hardened XXE-safe `parseXml`, and shared constants (`MAX_READ_BYTES`, `MAX_SEARCH_MATCHES`, `ABL_BUILDER_ID`). |
-| `WorkspaceTools` (18), `ReadingTools` (6), `EditorStateTools` (7), `DiagnosticsTools` (6), `EditingTools` (7), `FileHistoryTools` (3), `SvnTools` (1) | The 53 tools grouped by the categories below; each calls Eclipse workspace APIs (`IProject`, `IFile`, `IMarker`, `WorkspaceJob`). `SvnTools` is the exception: it shells out to the `svn` CLI (see below). |
+| `WorkspaceTools` (18), `ReadingTools` (6), `EditorStateTools` (7), `DiagnosticsTools` (7), `EditingTools` (7), `FileHistoryTools` (3), `SvnTools` (1) | The 54 tools grouped by the categories below; each calls Eclipse workspace APIs (`IProject`, `IFile`, `IMarker`, `WorkspaceJob`). `SvnTools` is the exception: it shells out to the `svn` CLI (see below). |
 | `tools/symbol/` | `SymbolGraphTools` (5 tools) plus its package-private data types `RunRef`/`InvokeRef`/`XrefRecord`/`SymbolIndex`. Owns the per-project in-memory index (`SymbolGraphTools.projectIndices`, a `ConcurrentHashMap`). |
 
 **Preferences** — `src/com/github/xstibo/pdsoe/mcp/preferences/`:
 
 | File | Role |
 |---|---|
-| `PreferenceConstants.java` | Store keys: `server.enabled`, `server.port`, `tools.disabled` (comma-separated tool names to skip registering; storing the *disabled* set means new tools default to enabled). |
-| `PreferenceInitializer.java` | `AbstractPreferenceInitializer` (registered via `org.eclipse.core.runtime.preferences`). Seeds defaults: `enabled=true`, `port=Integer.getInteger("pdsoe.mcp.port", 8123)` (so the old `-D` system property still sets the *default*), `tools.disabled=""` (everything enabled). |
-| `McpPreferencePage.java` | `PreferencePage` (registered via `org.eclipse.ui.preferencePages`, "PDSOE MCP Server"). Hand-built layout: a "Server Configuration" group (Enable checkbox + Port field, manual range validation 1024-65535) a "Server Status" group (read-only status label), and a "Tools" group (a `CheckboxTreeViewer` of domains -> tools for filtering). `performOk()` persists the fields then reconciles the server on a background `Job` (off the UI thread — graceful close can block ~10s) and reports a bind failure (e.g. port in use) via the status line + an error dialog (parented to the workbench window shell so it survives Apply-and-Close). Apply / Apply-and-Close both route through `performOk()`. Plain `PreferencePage` (not `FieldEditorPreferencePage`) because field editors fight over the shared parent's grid layout, which precludes clean section groups. The tools tree uses an `ICheckStateProvider` driven by a working copy of the disabled-tool set (not the widget's own check state), so domain tristate (gray = partially enabled) stays correct even for collapsed/never-realized nodes. |
+| `PreferenceConstants.java` | Store keys: `server.enabled`, `server.port`, `tools.disabled` (comma-separated tool names to skip registering; storing the *disabled* set means new tools default to enabled), `svn.executable` (full path to the svn CLI; `""` = auto-detect). |
+| `PreferenceInitializer.java` | `AbstractPreferenceInitializer` (registered via `org.eclipse.core.runtime.preferences`). Seeds defaults: `enabled=true`, `port=Integer.getInteger("pdsoe.mcp.port", 8123)` (so the old `-D` system property still sets the *default*), `tools.disabled=""` (everything enabled), `svn.executable=""` (auto-detect). |
+| `McpPreferencePage.java` | `PreferencePage` (registered via `org.eclipse.ui.preferencePages`, "PDSOE MCP Server"). Hand-built layout: a "Server Configuration" group (Enable checkbox + Port field, manual range validation 1024-65535) a "Server Status" group (read-only status label), a "Version Control" group (svn-executable path field + Browse button; persisted to `svn.executable`, read by `SvnTools` at call time so no server reconcile is needed), and a "Tools" group (a `CheckboxTreeViewer` of domains -> tools for filtering). `performOk()` persists the fields then reconciles the server on a background `Job` (off the UI thread — graceful close can block ~10s) and reports a bind failure (e.g. port in use) via the status line + an error dialog (parented to the workbench window shell so it survives Apply-and-Close). Apply / Apply-and-Close both route through `performOk()`. Plain `PreferencePage` (not `FieldEditorPreferencePage`) because field editors fight over the shared parent's grid layout, which precludes clean section groups. The tools tree uses an `ICheckStateProvider` driven by a working copy of the disabled-tool set (not the widget's own check state), so domain tristate (gray = partially enabled) stays correct even for collapsed/never-realized nodes. |
 
 **Plugin wiring**: `plugin.xml` registers `Activator` as a startup extension, the preference
 page (`org.eclipse.ui.preferencePages`), and the preference initializer
@@ -104,10 +104,10 @@ Eclipse API each is built on:
 | Reading code | `ReadingTools` (6) | `IFile.getContents()` + proparse parser |
 | Symbol graph | `SymbolGraphTools` (5) | xref-xml index (run `build_symbol_index` first) |
 | Editor state | `EditorStateTools` (7) | `IWorkbench` / `ITextEditor` / `ITextSelection` |
-| Diagnostics & build | `DiagnosticsTools` (6) | `IMarker` + `WorkspaceJob` |
+| Diagnostics & build | `DiagnosticsTools` (7) | `IMarker` + `WorkspaceJob` |
 | Code editing | `EditingTools` (7) | `IFile.setContents()` + Eclipse local history |
 | File history | `FileHistoryTools` (3) | Eclipse local history |
-| Version control (SVN) | `SvnTools` (1) | `svn` CLI on the PATH, run in the project's working copy |
+| Version control (SVN) | `SvnTools` (1) | `svn` CLI (resolved via preference -> PATH -> known locations), run in the project's working copy |
 
 ### Not feasible (no public PDSOE API)
 - **PROPATH-aware name resolution** (resolving `RUN procedure-name` without `.p` to a specific
@@ -213,6 +213,18 @@ Durable findings (verified against PDSOE 12.8 on a large production ABL project)
   (e.g. 12942) on the offending member too, so the 12918 is no longer reliably paired with a
   clean super. Not fixable in the plugin; `collectMarkers` appends a diagnostic hint when a
   12918 marker is present, worded to cover both cases (super clean vs super self-erroring).
+- **To trigger a native PDSOE/OpenEdge menu action, execute its registered workbench command -
+  do not reimplement the behavior.** `rebuild_files_with_errors` runs OpenEdge's own
+  "Recompile Files that Have Errors" command (defined in `com.openedge.pdt.text`): on the UI
+  thread (`Display.syncExec`) it gets `ICommandService`/`IHandlerService` from
+  `PlatformUI.getWorkbench()` and calls `executeCommandInContext(...)`. The project-scoped
+  command id is `com.openedge.pdt.text.compilefileswitherror` (handler
+  `CompileFilesWithErrorHandler`); a workspace-wide variant exists at
+  `com.openedge.pdt.text.compileallfileswitherrors`. The project-scoped command's `visibleWhen`
+  needs a selection that iterates `IResource`, so the call builds an `EvaluationContext` with the
+  `IProject` as `ISources.ACTIVE_CURRENT_SELECTION_NAME` - without that selection the handler has
+  no target. This needs `org.eclipse.core.commands` + `org.eclipse.core.expressions` in
+  `Require-Bundle`. (Command ids verified against PDSOE 12.8.11; pass `command_id` to override.)
 
 ## Runtime lifecycle
 
@@ -243,7 +255,7 @@ deterministic (`ServerConnector` defaults to `SO_REUSEADDR`).
 
 **Single MCP server, single endpoint** — all tools operate on one domain (the ABL workspace),
 so one server at `/mcp` is simpler than splitting into multiple logical servers. The set has
-grown to ~53 tools without navigation problems; revisit only if it grows much larger.
+grown to ~54 tools without navigation problems; revisit only if it grows much larger.
 
 **Loopback-only bind, no authorization token** — binds to `127.0.0.1`, so it's not
 network-reachable. A token would add `claude mcp add` friction with no security benefit on a
@@ -258,8 +270,8 @@ a bearer token is on the roadmap.
 
 **Settings via Eclipse Preferences** — a plain `PreferencePage` +
 `AbstractPreferenceInitializer` under *Window > Preferences > PDSOE MCP Server* exposes an
-Enable toggle, the bind port, a read-only status line, and a per-tool filter (see
-Architecture > Preferences). Changes apply only on **Apply / Apply-and-Close** (`performOk()`),
+Enable toggle, the bind port, a read-only status line, a per-tool filter, and the svn-executable
+path (see Architecture > Preferences). Changes apply only on **Apply / Apply-and-Close** (`performOk()`),
 reconciled on a background `Job` (off the UI thread), surfacing bind failures. A **tool-filter
 change is applied live** on the running server (no restart); a **port change** restarts with a
 hard stop (see Runtime lifecycle). The old `-Dpdsoe.mcp.port` system property survives as
@@ -271,11 +283,19 @@ guard rail, not a security control, so it is not worth the added complexity.
 **Version control via the `svn` CLI, not an Eclipse SVN integration** — `SvnTools` shells out to
 the `svn` command-line client (run with the Eclipse project's on-disk location as the working
 directory) rather than depending on Subversive/Subclipse, whose Java APIs are neither public nor
-stable across PDSOE installs. The CLI is the one interface every SVN setup has. Trade-off: `svn`
-must be on the PATH (a clear error is returned if it is not). The process is drained on a separate
-thread (so a large diff cannot deadlock on a full pipe buffer), killed past a 120s timeout, and its
-output capped at `MAX_READ_BYTES`. Read-only so far (`svn_diff`); the same shell-out pattern can
-add `svn status` / `svn log` later.
+stable across PDSOE installs. The CLI is the one interface every SVN setup has. The executable is
+located by `ToolSupport.resolveSvnExecutable()` in priority order: the `svn.executable` preference
+(if it points at a real file) -> `svn` on the `PATH` -> well-known install locations
+(`svnProbeLocations()`: TortoiseSVN/SlikSVN/Subversion/CollabNet/VisualSVN on Windows;
+`/usr/bin`, `/usr/local/bin`, `/opt/homebrew/bin`, `/opt/local/bin` elsewhere). Probing absolute
+locations matters because the IDE inherits the `PATH` from when it started, so a just-installed
+`svn` is found without an IDE restart; a common Windows gotcha is **TortoiseSVN installed without
+its "command line client tools" component**, so there is no `svn.exe` at all. If nothing resolves,
+`svnNotFoundMessage()` lists what was tried and how to fix it (install a CLI, or set the path in
+Preferences). The process is drained on a separate thread (so a large diff cannot deadlock on a
+full pipe buffer), killed past a 120s timeout, and its output capped at `MAX_READ_BYTES`. Read-only
+so far (`svn_diff`); the same shell-out pattern (and the shared resolver) can add `svn status` /
+`svn log` later.
 
 ### Symbol graph
 

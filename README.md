@@ -19,7 +19,7 @@ Once installed, AI assistants can interact with your PDSOE workspace directly �
 Download the latest `com.github.xstibo.pdsoe.mcp_<version>.jar` from the
 [**Releases**](../../releases) page and drop it into your PDSOE installation's `dropins/` folder
 (delete any older copy first), then restart PDSOE. Confirm startup via **Window → Show View →
-Error Log** — you should see `PDSOE MCP Server started on http://127.0.0.1:8123/mcp (53 tools)`.
+Error Log** — you should see `PDSOE MCP Server started on http://127.0.0.1:8123/mcp (54 tools)`.
 
 ## Building from source
 
@@ -31,7 +31,7 @@ This is an Eclipse PDE project — there's no Maven/Gradle/CLI build; everything
    - **Develop / smoke-test** — **Run → Run As → Eclipse Application** launches a child IDE with the plugin active.
    - **Install into your PDSOE** — **File → Export → Plug-in Development → Deployable plug-ins and fragments**, select `com.github.xstibo.pdsoe.mcp`, and finish to produce `plugins/com.github.xstibo.pdsoe.mcp_<version>.jar`. Drop that JAR into your PDSOE installation's `dropins/` folder (delete any older copy first — the version qualifier changes each export) and restart PDSOE.
 
-Either way, confirm startup via **Window → Show View → Error Log** — you should see `PDSOE MCP Server started on http://127.0.0.1:8123/mcp (53 tools)`.
+Either way, confirm startup via **Window → Show View → Error Log** — you should see `PDSOE MCP Server started on http://127.0.0.1:8123/mcp (54 tools)`.
 
 ## Connecting Claude Code
 
@@ -64,13 +64,14 @@ Inputs are hardened: caller paths are constrained to the project (`..` is reject
 - **Enable HTTP MCP Server** — turn the server on or off (on by default).
 - **Port** — the loopback port the server binds (default `8123`).
 - **Server status** — shows whether the server is currently running.
+- **svn executable** — optional full path to the Subversion command-line client used by the SVN tools. Leave empty to auto-detect (`svn` on the `PATH`, then common install locations like TortoiseSVN/SlikSVN). Set it if `svn` is installed elsewhere or not on the `PATH`.
 - **Tools** — a checkbox tree of all tools grouped by domain. Uncheck individual tools (or a whole domain) to stop the server registering them; everything is enabled by default.
 
 Changes take effect when you press **Apply** (or **Apply and Close**) — no IDE restart needed. Tool changes are applied to the running server live (your MCP client's tool list updates without reconnecting); a port change restarts the server.
 
 ## Available tools
 
-53 tools across workspace navigation, code reading, the cross-reference symbol graph, editor state, diagnostics & build, code editing, file history, and version control.
+54 tools across workspace navigation, code reading, the cross-reference symbol graph, editor state, diagnostics & build, code editing, file history, and version control.
 
 ### Workspace & file navigation
 
@@ -139,6 +140,7 @@ Backed by ABL-compiler-generated `.xref.xml` files. Run `build_symbol_index` fir
 | `build_project` | Triggers a full or incremental build; returns resulting markers |
 | `build_file` | Recompiles a single file via the ABL builder (always, even if unchanged); returns only that file's markers |
 | `clean_project` | Cleans a project (removes build output) and triggers a full rebuild |
+| `rebuild_files_with_errors` | Recompiles every file in the project that has an error marker, via PDSOE's own "Recompile Files that Have Errors" command |
 | `get_console_output` | Returns the content of the last active Eclipse console |
 
 ### Code editing
@@ -165,7 +167,7 @@ _(Eclipse local-history snapshots via `IFile.getHistory()`)_
 
 ### Version control (SVN)
 
-_(Shells out to the `svn` command-line client, which must be on the PATH, run in the project's working copy)_
+_(Shells out to the `svn` command-line client, run in the project's working copy. The executable is auto-detected on the `PATH` and at common install locations; set its full path under **Preferences → PDSOE MCP Server → Version Control** if it lives elsewhere.)_
 
 | Tool | Description |
 |---|---|
@@ -191,7 +193,7 @@ src/com/github/xstibo/pdsoe/mcp/
     ├── WorkspaceTools.java     # file navigation, search, propath, includes, file ops (18)
     ├── ReadingTools.java       # content, line ranges, ABL outline/source/signature, xref (6)
     ├── EditorStateTools.java   # active file, cursor, selection, navigation, saving (7)
-    ├── DiagnosticsTools.java   # markers, project/file build, clean, console (6)
+    ├── DiagnosticsTools.java   # markers, project/file build, clean, console, recompile-errors (7)
     ├── EditingTools.java       # write, insert, replace, delete, undo, patch (7)
     ├── FileHistoryTools.java   # local-history list / read / diff (3)
     └── symbol/                 # SymbolGraphTools (5) + index data types
@@ -201,7 +203,7 @@ Each provider implements `ToolProvider`; `McpServerManager` flat-maps over the l
 
 ## Roadmap
 
-Working today: all 53 tools above, async/non-blocking handlers, ABL [proparse](https://github.com/Riverside-Software/proparse) integration, the cross-reference symbol graph, single-file builds, and JAR export/install — verified in a real PDSOE 12.8 instance.
+Working today: all 54 tools above, async/non-blocking handlers, ABL [proparse](https://github.com/Riverside-Software/proparse) integration, the cross-reference symbol graph, single-file builds, and JAR export/install — verified in a real PDSOE 12.8 instance.
 
 Planned:
 
