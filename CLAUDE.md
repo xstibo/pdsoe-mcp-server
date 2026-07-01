@@ -365,7 +365,7 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
   (3) `collectMarkers` appends a hint on error 12918 (super-class compile failure). Same
   export-from-Eclipse + `gh release create` flow as v1.0.0
   (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.2.2).
-- [ ] Cut a `v1.3.0` GitHub Release (two new tools + a bugfix). New tools: `svn_diff` (the
+- [x] Cut a `v1.3.0` GitHub Release (two new tools + a bugfix). New tools: `svn_diff` (the
   `SvnTools` provider, shelling out to the `svn` CLI resolved via preference -> PATH -> known
   locations) and `rebuild_files_with_errors` (runs OpenEdge's own "Recompile Files that Have
   Errors" workbench command). Bugfix: `clean_project` set a project scheduling rule
@@ -374,7 +374,7 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
   `Attempted to beginRule: R/, does not match outer scope rule: P/<project>`; now uses
   `ResourcesPlugin.getWorkspace().getRoot()` like the other build tools. Minor bump (not
   1.2.3) because it adds tools, not just fixes. Same export-from-Eclipse + `gh release create`
-  flow as v1.0.0.
+  flow as v1.0.0 (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.3.0).
 - [ ] (maybe) Automated release on tag push - a `.github/workflows/release.yml` that fires on
   `v*` tags and cuts the GitHub Release. The blocker is there is **no headless build**: a PDE
   plugin needs a Tycho/Maven build to produce the JAR in CI, which means authoring a `pom.xml`
