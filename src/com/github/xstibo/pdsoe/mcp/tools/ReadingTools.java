@@ -4,6 +4,8 @@ import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
+import org.prorefactor.core.ABLNodeType;
+import org.prorefactor.core.JPNode;
 import reactor.core.publisher.Mono;
 
 import java.io.BufferedReader;
@@ -155,33 +157,18 @@ public class ReadingTools implements ToolProvider {
             }
             IProject project = file.getProject();
 
-            try (InputStream is = file.getContents()) {
-                String propath = readPropath(project);
-                org.prorefactor.proparse.support.IProparseEnvironment session = buildParseSession(propath);
-                org.prorefactor.treeparser.ParseUnit pu = null;
-                try {
-                    pu = new org.prorefactor.treeparser.ParseUnit(is, path, session, StandardCharsets.UTF_8);
-                    pu.treeParser01();
+            try {
+                List<String> lines = readAllLines(file);
+                List<RoutineSpan> routines = parseRoutines(project, path, lines);
+                if (routines.isEmpty()) return Mono.just(result("No outline entries found."));
 
-                    org.prorefactor.treeparser.TreeParserRootSymbolScope scope = pu.getRootScope();
-                    if (scope == null) return Mono.just(error("Parse produced no symbol scope for: " + path));
-
-                    List<org.prorefactor.treeparser.symbols.Routine> routines = scope.getRoutines();
-                    if (routines.isEmpty()) return Mono.just(result("No outline entries found."));
-
-                    StringBuilder sb = new StringBuilder();
-                    for (org.prorefactor.treeparser.symbols.Routine r : routines) {
-                        org.prorefactor.core.JPNode defNode = r.getDefineNode();
-                        int line = defNode != null ? defNode.getLine() : 0;
-                        sb.append(r.getNodeType().name()).append(" ").append(r.getName());
-                        if (line > 0) sb.append(" (line ").append(line).append(")");
-                        sb.append("\n");
-                    }
-                    return Mono.just(result(sb.toString().trim()));
-                } finally {
-                    pu = null;
-                    session = null;
+                StringBuilder sb = new StringBuilder();
+                for (RoutineSpan r : routines) {
+                    sb.append(r.type()).append(" ").append(r.name() == null ? "(anonymous)" : r.name());
+                    if (r.startLine() > 0) sb.append(" (line ").append(r.startLine()).append(")");
+                    sb.append("\n");
                 }
+                return Mono.just(result(sb.toString().trim()));
             } catch (Exception e) {
                 return Mono.just(error("Parse error: " + describe(e)));
             }
@@ -220,42 +207,17 @@ public class ReadingTools implements ToolProvider {
 
             try {
                 List<String> lines = readAllLines(file);
-                String propath = readPropath(project);
-                org.prorefactor.proparse.support.IProparseEnvironment session = buildParseSession(propath);
-                org.prorefactor.treeparser.ParseUnit pu = null;
-                try {
-                    pu = new org.prorefactor.treeparser.ParseUnit(
-                        String.join("\n", lines), path, session, StandardCharsets.UTF_8);
-                    pu.treeParser01();
+                List<RoutineSpan> routines = parseRoutines(project, path, lines);
+                RoutineSpan match = findRoutine(routines, name);
+                if (match == null)
+                    return Mono.just(result("No routine named '" + name + "' found in " + path));
 
-                    org.prorefactor.treeparser.TreeParserRootSymbolScope scope = pu.getRootScope();
-                    if (scope == null) return Mono.just(error("Parse produced no symbol scope for: " + path));
-
-                    List<org.prorefactor.treeparser.symbols.Routine> routines = scope.lookupRoutines(name);
-                    if (routines == null || routines.isEmpty())
-                        return Mono.just(result("No routine named '" + name + "' found in " + path));
-
-                    org.prorefactor.treeparser.symbols.Routine routine = routines.get(0);
-                    org.prorefactor.core.JPNode defNode = routine.getDefineNode();
-                    if (defNode == null) return Mono.just(error("Could not locate definition node for: " + name));
-
-                    int startLine = defNode.getLine();
-                    int endLine = startLine;
-                    org.prorefactor.core.JPNode endNode = defNode.getNextSibling();
-                    while (endNode != null) {
-                        endLine = endNode.getLine();
-                        endNode = endNode.getNextSibling();
-                    }
-                    if (endLine < startLine) endLine = startLine;
-
-                    List<String> sourceLines = lines.subList(
-                        Math.max(0, startLine - 1),
-                        Math.min(endLine, lines.size()));
-                    return Mono.just(result(String.join("\n", sourceLines)));
-                } finally {
-                    pu = null;
-                    session = null;
-                }
+                int startLine = match.startLine();
+                int endLine = Math.max(match.endLine(), startLine);
+                List<String> sourceLines = lines.subList(
+                    Math.max(0, startLine - 1),
+                    Math.min(endLine, lines.size()));
+                return Mono.just(result(String.join("\n", sourceLines)));
             } catch (Exception e) {
                 return Mono.just(error("Parse error: " + describe(e)));
             }
@@ -294,61 +256,43 @@ public class ReadingTools implements ToolProvider {
 
             try {
                 List<String> lines = readAllLines(file);
-                String propath = readPropath(project);
-                org.prorefactor.proparse.support.IProparseEnvironment session = buildParseSession(propath);
-                org.prorefactor.treeparser.ParseUnit pu = null;
-                try {
-                    pu = new org.prorefactor.treeparser.ParseUnit(
-                        String.join("\n", lines), path, session, StandardCharsets.UTF_8);
-                    pu.treeParser01();
+                List<RoutineSpan> routines = parseRoutines(project, path, lines);
+                RoutineSpan match = findRoutine(routines, name);
+                if (match == null)
+                    return Mono.just(result("No routine named '" + name + "' found in " + path));
 
-                    org.prorefactor.treeparser.TreeParserRootSymbolScope scope = pu.getRootScope();
-                    if (scope == null) return Mono.just(error("Parse produced no symbol scope for: " + path));
+                int startLine = match.startLine();
+                String nodeTypeName = match.type();
 
-                    List<org.prorefactor.treeparser.symbols.Routine> routines = scope.lookupRoutines(name);
-                    if (routines == null || routines.isEmpty())
-                        return Mono.just(result("No routine named '" + name + "' found in " + path));
-
-                    org.prorefactor.treeparser.symbols.Routine routine = routines.get(0);
-                    org.prorefactor.core.JPNode defNode = routine.getDefineNode();
-                    if (defNode == null) return Mono.just(error("Could not locate definition node for: " + name));
-
-                    int startLine = defNode.getLine();
-                    String nodeTypeName = routine.getNodeType().name();
-
-                    List<String> sigLines = new ArrayList<>();
-                    if ("PROCEDURE".equalsIgnoreCase(nodeTypeName)) {
-                        sigLines.add(lines.get(startLine - 1));
-                        Pattern paramPat = Pattern.compile(
-                            "^\\s*DEFINE\\s+\\w+\\s+PARAMETER\\b", Pattern.CASE_INSENSITIVE);
-                        boolean capped = true;
-                        for (int i = startLine; i < Math.min(startLine + 30, lines.size()); i++) {
-                            String ln = lines.get(i);
-                            if (paramPat.matcher(ln).find()) {
-                                sigLines.add(ln);
-                            } else if (!ln.isBlank()
-                                    && !ln.stripLeading().startsWith("//")
-                                    && !ln.stripLeading().startsWith("/*")) {
-                                capped = false;
-                                break;
-                            }
-                        }
-                        if (capped && sigLines.size() > 1) sigLines.add("[signature truncated at 30 lines]");
-                    } else {
-                        for (int i = startLine - 1; i < Math.min(startLine + 29, lines.size()); i++) {
-                            String ln = lines.get(i);
+                List<String> sigLines = new ArrayList<>();
+                if ("PROCEDURE".equalsIgnoreCase(nodeTypeName)) {
+                    sigLines.add(lines.get(startLine - 1));
+                    Pattern paramPat = Pattern.compile(
+                        "^\\s*DEFINE\\s+\\w+\\s+PARAMETER\\b", Pattern.CASE_INSENSITIVE);
+                    boolean capped = true;
+                    for (int i = startLine; i < Math.min(startLine + 30, lines.size()); i++) {
+                        String ln = lines.get(i);
+                        if (paramPat.matcher(ln).find()) {
                             sigLines.add(ln);
-                            if (ln.stripTrailing().endsWith(":")) break;
+                        } else if (!ln.isBlank()
+                                && !ln.stripLeading().startsWith("//")
+                                && !ln.stripLeading().startsWith("/*")) {
+                            capped = false;
+                            break;
                         }
-                        if (!sigLines.isEmpty() && !sigLines.get(sigLines.size() - 1).stripTrailing().endsWith(":"))
-                            sigLines.add("[signature truncated at 30 lines]");
                     }
-
-                    return Mono.just(result(String.join("\n", sigLines)));
-                } finally {
-                    pu = null;
-                    session = null;
+                    if (capped && sigLines.size() > 1) sigLines.add("[signature truncated at 30 lines]");
+                } else {
+                    for (int i = startLine - 1; i < Math.min(startLine + 29, lines.size()); i++) {
+                        String ln = lines.get(i);
+                        sigLines.add(ln);
+                        if (ln.stripTrailing().endsWith(":")) break;
+                    }
+                    if (!sigLines.isEmpty() && !sigLines.get(sigLines.size() - 1).stripTrailing().endsWith(":"))
+                        sigLines.add("[signature truncated at 30 lines]");
                 }
+
+                return Mono.just(result(String.join("\n", sigLines)));
             } catch (Exception e) {
                 return Mono.just(error("Parse error: " + describe(e)));
             }
@@ -440,6 +384,98 @@ public class ReadingTools implements ToolProvider {
                 return Mono.just(error("XML parse error: " + describe(e)));
             }
         });
+    }
+
+    // --- ABL routine location (syntactic parse only) ------------------------
+
+    /** A routine (method/procedure/function/constructor/destructor) located syntactically. */
+    private record RoutineSpan(String type, String name, int startLine, int endLine) {
+    }
+
+    /** First routine whose name matches {@code name} case-insensitively, or null. */
+    private static RoutineSpan findRoutine(List<RoutineSpan> routines, String name) {
+        for (RoutineSpan r : routines) {
+            if (r.name() != null && r.name().equalsIgnoreCase(name)) return r;
+        }
+        return null;
+    }
+
+    /**
+     * Parses the file syntactically (proparse {@code parse()} only - NO treeParser01, so there is
+     * no symbol/type resolution) and returns every routine's kind, name, and line span.
+     *
+     * <p>Avoiding treeParser01 is deliberate: type resolution needs the DB schema (we run with an
+     * empty one), so a {@code DEFINE BUFFER ... FOR <db-table>} makes the tree parser throw a
+     * NullPointerException in {@code TableBuffer.getTable()} (a whole class of files could not be
+     * outlined at all). The syntactic tree carries enough - statement-head nodes with their name
+     * and END terminator - for an outline and to locate a routine's start/end line.
+     */
+    private List<RoutineSpan> parseRoutines(IProject project, String path, List<String> lines) {
+        String propath = readPropath(project);
+        org.prorefactor.proparse.support.IProparseEnvironment session = buildParseSession(propath);
+        org.prorefactor.treeparser.ParseUnit pu = new org.prorefactor.treeparser.ParseUnit(
+            String.join("\n", lines), path, session, StandardCharsets.UTF_8);
+        pu.parse();
+        org.prorefactor.core.nodetypes.ProgramRootNode top = pu.getTopNode();
+        List<RoutineSpan> spans = new ArrayList<>();
+        if (top == null) return spans;
+        // queryStateHead returns only real statement heads (in source order), so the END keyword
+        // that closes each routine - itself an ABLNodeType.METHOD/etc. token - is not re-reported.
+        for (JPNode n : top.queryStateHead(ABLNodeType.METHOD, ABLNodeType.PROCEDURE,
+                ABLNodeType.FUNCTION, ABLNodeType.CONSTRUCTOR, ABLNodeType.DESTRUCTOR)) {
+            spans.add(new RoutineSpan(
+                n.getNodeType().name(), routineName(n), n.getLine(), routineEndLine(n)));
+        }
+        return spans;
+    }
+
+    /**
+     * The routine's declared name from its statement-head node. METHODs carry the name right
+     * before the parameter list (after any modifiers and return type); constructors/destructors
+     * are named by the class (a TYPE_NAME); procedures/functions carry the name as the first
+     * identifier after the keyword.
+     */
+    private static String routineName(JPNode head) {
+        ABLNodeType t = head.getNodeType();
+        List<JPNode> kids = head.getDirectChildren();
+        if (t == ABLNodeType.CONSTRUCTOR || t == ABLNodeType.DESTRUCTOR) {
+            for (JPNode c : kids) {
+                ABLNodeType ct = c.getNodeType();
+                if (ct == ABLNodeType.TYPE_NAME || ct == ABLNodeType.ID) return c.getText();
+            }
+            return null;
+        }
+        if (t == ABLNodeType.METHOD) {
+            JPNode prev = null;
+            for (JPNode c : kids) {
+                ABLNodeType ct = c.getNodeType();
+                if (ct == ABLNodeType.PARAMETER_LIST || ct == ABLNodeType.LEFTPAREN
+                        || ct == ABLNodeType.LEXCOLON) {
+                    return prev == null ? null : prev.getText();
+                }
+                prev = c;
+            }
+            return prev == null ? null : prev.getText();
+        }
+        // PROCEDURE, FUNCTION: the name is the first identifier after the keyword.
+        for (JPNode c : kids) {
+            if (c.getNodeType() == ABLNodeType.ID) return c.getText();
+        }
+        return kids.isEmpty() ? null : kids.get(0).getText();
+    }
+
+    /**
+     * The last source line the routine spans. proparse reports {@code getLine()} on a statement
+     * head as its opening line only; the END/PERIOD terminator children carry the closing line, so
+     * the max line over the head's direct children is the routine's last line. This replaces an
+     * earlier next-sibling walk that ran to end-of-file (returning every following routine too).
+     */
+    private static int routineEndLine(JPNode head) {
+        int max = head.getLine();
+        for (JPNode c : head.getDirectChildren()) {
+            max = Math.max(max, c.getLine());
+        }
+        return max;
     }
 
     private org.prorefactor.proparse.support.IProparseEnvironment buildParseSession(String propath) {

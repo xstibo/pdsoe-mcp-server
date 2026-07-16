@@ -7,9 +7,13 @@ import org.eclipse.core.resources.IFolder;
 import org.eclipse.core.resources.IMarker;
 import org.eclipse.core.resources.IProject;
 import org.eclipse.core.resources.IResource;
+import org.eclipse.core.resources.ProjectScope;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.runtime.CoreException;
 import org.eclipse.core.runtime.IProgressMonitor;
+import org.eclipse.core.runtime.Platform;
+import org.eclipse.core.runtime.preferences.IScopeContext;
+import org.eclipse.core.runtime.preferences.InstanceScope;
 import org.eclipse.ui.IEditorInput;
 import org.eclipse.ui.IFileEditorInput;
 import org.w3c.dom.Document;
@@ -215,6 +219,22 @@ public final class ToolSupport {
     public static String normalizeLineEndings(String s, String sep) {
         String lf = s.replace("\r\n", "\n").replace("\r", "\n");
         return sep.equals("\n") ? lf : lf.replace("\n", sep);
+    }
+
+    /**
+     * The line separator to use for a NEW file in {@code project}, honoring Eclipse's "New text
+     * file line delimiter" setting (project scope, then workspace instance scope, then the OS
+     * default) - the same preference the text editors use. Without this a new file inherits the
+     * MCP client's LF-joined content and lands as LF even in a CRLF (Windows) workspace, so its
+     * first SVN/Git diff shows every line changed (see {@link TextFormat}).
+     */
+    public static String newFileLineSeparator(IProject project) {
+        IScopeContext[] scopes = project != null
+            ? new IScopeContext[]{new ProjectScope(project), InstanceScope.INSTANCE}
+            : new IScopeContext[]{InstanceScope.INSTANCE};
+        String sep = Platform.getPreferencesService().getString(
+            Platform.PI_RUNTIME, Platform.PREF_LINE_SEPARATOR, null, scopes);
+        return sep != null ? sep : System.lineSeparator();
     }
 
     // --- small-file IO ------------------------------------------------------

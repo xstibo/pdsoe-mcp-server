@@ -86,7 +86,7 @@ Changes take effect when you press **Apply** (or **Apply and Close**) — no IDE
 | `get_file_info` | Returns file metadata: exists, size, last modified, line count |
 | `search_files` | Finds files by name or glob pattern (e.g. `*.p`, `src/**/*.cls`) |
 | `file_search_regexp` | Finds files whose names match a Java regular expression |
-| `search_in_files` | Searches for text or regex across files; returns `file:line: context` (capped at 500) |
+| `search_in_files` | Searches for text or regex across files; returns `file:line: context` (capped at 500). Optional `path` restricts the search to a project-relative folder or file |
 | `list_includes` | Lists the `.i` files directly included by an ABL source file |
 | `find_files_including` | Lists all ABL files that include a given `.i` file (reverse of `list_includes`) |
 | `delete_file` | Deletes a file (recorded in local history) |

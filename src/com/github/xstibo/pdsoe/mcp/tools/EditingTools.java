@@ -94,7 +94,12 @@ public class EditingTools implements ToolProvider {
                                     .getBytes(fmt.charset());
                                 file.setContents(new ByteArrayInputStream(bytes), IResource.KEEP_HISTORY, monitor);
                             } else {
-                                byte[] bytes = content.getBytes(fileCharset(file));
+                                // New file: normalize to the workspace's "new file" line delimiter
+                                // (CRLF on a Windows workspace) instead of writing the client's
+                                // LF-joined content verbatim - a file born LF stays LF on every
+                                // later rewrite and diffs as fully changed (see Gotchas).
+                                String sep = ToolSupport.newFileLineSeparator(project);
+                                byte[] bytes = normalizeLineEndings(content, sep).getBytes(fileCharset(file));
                                 ensureParentFolders(file, monitor);
                                 file.create(new ByteArrayInputStream(bytes), IResource.NONE, monitor);
                             }

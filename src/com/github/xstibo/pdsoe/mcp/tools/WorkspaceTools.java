@@ -216,6 +216,7 @@ public class WorkspaceTools implements ToolProvider {
                 Map.of(
                     "project", Map.of("type", "string"),
                     "query", Map.of("type", "string", "description", "Text or regex to search for"),
+                    "path", Map.of("type", "string", "description", "Optional project-relative folder or file to restrict the search to, e.g. src/module (default: whole project)"),
                     "file_pattern", Map.of("type", "string", "description", "Glob to filter file names, e.g. *.p (default: all files)"),
                     "regex", Map.of("type", "boolean", "description", "Treat query as a regex (default: false)")),
                 List.of("project", "query"),
@@ -226,15 +227,25 @@ public class WorkspaceTools implements ToolProvider {
             String projectName = param(req.arguments(), "project");
             if (projectName == null || projectName.isBlank()) return Mono.just(error("project is required"));
             String query = param(req.arguments(), "query");
+            if (query == null || query.isBlank()) query = param(req.arguments(), "search"); // tolerate the 'search' alias
             if (query == null || query.isBlank()) return Mono.just(error("query is required"));
             String rawPattern = param(req.arguments(), "file_pattern");
             boolean useRegex = Boolean.TRUE.equals(req.arguments().get("regex"));
+            String scopePath = param(req.arguments(), "path");
 
             IProject project;
             try {
                 project = resolveProject(projectName);
             } catch (IllegalArgumentException e) {
                 return Mono.just(error(e.getMessage()));
+            }
+
+            IResource searchRoot = project;
+            if (scopePath != null && !scopePath.isBlank()) {
+                IResource member = project.findMember(scopePath);
+                if (member == null || !member.exists())
+                    return Mono.just(error("path not found in project: " + scopePath));
+                searchRoot = member;
             }
 
             String filePatternStr = (rawPattern == null || rawPattern.isBlank()) ? "*" : rawPattern;
@@ -247,7 +258,10 @@ public class WorkspaceTools implements ToolProvider {
 
             Pattern searchPattern;
             try {
-                searchPattern = useRegex ? Pattern.compile(query)
+                // MULTILINE so a caller's ^/$ anchors match at line boundaries, not just the
+                // whole-buffer start/end - TextSearchEngine applies the pattern to the entire
+                // file content, so without it an anchored regex never matched (BUG-021).
+                searchPattern = useRegex ? Pattern.compile(query, Pattern.MULTILINE)
                     : Pattern.compile(Pattern.quote(query));
             } catch (PatternSyntaxException e) {
                 return Mono.just(error("Invalid regex: " + e.getMessage()));
@@ -256,7 +270,7 @@ public class WorkspaceTools implements ToolProvider {
             List<String> matchLines = new ArrayList<>();
             TextSearchEngine engine = TextSearchEngine.create();
             TextSearchScope scope = TextSearchScope.newSearchScope(
-                new IResource[]{project}, fileNamePattern, false);
+                new IResource[]{searchRoot}, fileNamePattern, false);
             engine.search(scope, new TextSearchRequestor() {
                 @Override
                 public boolean acceptPatternMatch(TextSearchMatchAccess access) throws CoreException {

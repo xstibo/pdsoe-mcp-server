@@ -181,6 +181,25 @@ Durable findings (verified against PDSOE 12.8 on a large production ABL project)
   bulk read works block-at-a-time — keep both when touching that code.
 - **Unified-diff hunk length comes from `origCount`** in `@@ -start,origCount @@`, not the count
   of `-` lines.
+- **`search_in_files` takes an optional `path` (project-relative folder/file) to scope the search**
+  and reads the search term from `query` *or* `search` (some clients send `search`); the scope root
+  is `project.findMember(path)` fed to `TextSearchScope`, defaulting to the whole project (BUG-017).
+  A regex needle (`regex: true`) is compiled with `Pattern.MULTILINE` so caller `^`/`$` anchors match
+  at line boundaries - `TextSearchEngine` applies the pattern to the whole file buffer, so without
+  MULTILINE an anchored regex matched nothing (BUG-021).
+- **The outline / method-source / method-signature tools parse *syntactically* (`ParseUnit.parse()`),
+  not `treeParser01()`.** treeParser01 does symbol/type resolution, which needs the DB schema; the
+  plugin runs with an empty `Schema()`, so a `DEFINE BUFFER lb FOR <db-table>` makes it throw
+  `NullPointerException: ...TableBuffer.getTable() ... "ourBuffer" is null` and the whole file
+  could not be outlined at all (BUG-020). The syntactic tree is enough:
+  `getTopNode().queryStateHead(METHOD, PROCEDURE, FUNCTION, CONSTRUCTOR, DESTRUCTOR)` returns the
+  routine heads in source order (`queryMainFile` also re-reports the `END METHOD` keyword node - use
+  `queryStateHead`). A routine's **end line is the max `getLine()` over the head node's direct
+  children** - the `END`/`PERIOD` terminator tokens carry it; `getEndLine()` on the head returns
+  only its opening line, and an earlier `getDefineNode().getNextSibling()` walk ran to end-of-file,
+  so `get_method_source` returned the method plus every routine after it (BUG-015). Routine name:
+  METHOD carries it right before `PARAMETER_LIST` (after modifiers + return type),
+  CONSTRUCTOR/DESTRUCTOR use the class `TYPE_NAME`, PROCEDURE/FUNCTION use the first `ID` child.
 - **Edit tools must preserve each file's original EOL, trailing-newline state, and charset.**
   ABL files on Windows are CRLF; `BufferedReader.readLine()` strips terminators, so a naive
   rewrite with `\n` flips every line and SVN/Git report the whole file changed (a real bug hit
@@ -190,6 +209,14 @@ Durable findings (verified against PDSOE 12.8 on a large production ABL project)
   `fileCharset(file)` (the Eclipse `IFile.getCharset()`), not hardcoded UTF-8. `write_file`
   normalizes incoming content to the existing file's EOL via `normalizeLineEndings`. Keep all
   write paths routed through these helpers when touching the editing tools.
+- **`write_file` on a *new* file must normalize to the workspace's "new file" line delimiter**, not
+  write the client's content verbatim. The MCP client sends LF-joined content, so a brand-new file
+  was born with LF even on a CRLF (Windows) workspace - and because every later rewrite preserves
+  the file's *existing* EOL, once born LF it stayed LF forever, diffing as fully changed in SVN/Git
+  (BUG-019). The new-file branch now runs content through `ToolSupport.newFileLineSeparator(project)`,
+  which resolves Eclipse's `line.separator` preference (project scope -> instance scope -> OS
+  default) - the same "New text file line delimiter" setting the editors use. The existing-file
+  branch was already correct (it preserves the detected on-disk EOL).
 - **`replace_in_file` must normalize the *search* string's EOLs too, not just the replacement's.**
   A multi-line search literal arrives LF-joined from the MCP client and silently matched nothing
   against CRLF file content ("Replaced 0 occurrence(s)" despite the text existing). The literal
@@ -375,6 +402,19 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
   `ResourcesPlugin.getWorkspace().getRoot()` like the other build tools. Minor bump (not
   1.2.3) because it adds tools, not just fixes. Same export-from-Eclipse + `gh release create`
   flow as v1.0.0 (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.3.0).
+- [ ] Cut a `v1.3.1` GitHub Release (bugfixes only, no new tools; the first four verified live on
+  PDSOE 12.8, the fifth pending a live re-check): (1) `get_method_source` returned the method plus
+  everything to end-of-file - the end line now comes from the max line over the routine head's
+  direct children (its `END`/`PERIOD` tokens) instead of a next-sibling walk (BUG-015);
+  (2) `get_file_outline`/`get_method_signature`/`get_method_source` threw a `NullPointerException`
+  (`TableBuffer.getTable()`) on any class with `DEFINE BUFFER ... FOR <db-table>` - the three ABL
+  tools now parse syntactically (`ParseUnit.parse()`, no `treeParser01()` symbol resolution)
+  (BUG-020); (3) `search_in_files` gained an optional `path` scope and accepts `search` as an alias
+  for `query` (BUG-017); (4) `write_file` on a new file now normalizes to the workspace's "new file"
+  line delimiter (CRLF on Windows) instead of the client's LF (BUG-019); (5) `search_in_files` regex
+  needles now compile with `Pattern.MULTILINE` so `^`/`$` anchors match per line (BUG-021). Patch
+  bump (1.3.1) because it is fixes only. Same export-from-Eclipse + `gh release create` flow as
+  v1.0.0.
 - [ ] (maybe) Automated release on tag push - a `.github/workflows/release.yml` that fires on
   `v*` tags and cuts the GitHub Release. The blocker is there is **no headless build**: a PDE
   plugin needs a Tycho/Maven build to produce the JAR in CI, which means authoring a `pom.xml`
