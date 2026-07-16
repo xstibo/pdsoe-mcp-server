@@ -402,8 +402,9 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
   `ResourcesPlugin.getWorkspace().getRoot()` like the other build tools. Minor bump (not
   1.2.3) because it adds tools, not just fixes. Same export-from-Eclipse + `gh release create`
   flow as v1.0.0 (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.3.0).
-- [ ] Cut a `v1.3.1` GitHub Release (bugfixes only, no new tools; the first four verified live on
-  PDSOE 12.8, the fifth pending a live re-check): (1) `get_method_source` returned the method plus
+- [x] Cut a `v1.3.1` GitHub Release (bugfixes only, no new tools; the first four verified live on
+  PDSOE 12.8, the fifth (BUG-021) verified compiled-in, pending a live regex-anchor check):
+  (1) `get_method_source` returned the method plus
   everything to end-of-file - the end line now comes from the max line over the routine head's
   direct children (its `END`/`PERIOD` tokens) instead of a next-sibling walk (BUG-015);
   (2) `get_file_outline`/`get_method_signature`/`get_method_source` threw a `NullPointerException`
@@ -414,7 +415,7 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
   line delimiter (CRLF on Windows) instead of the client's LF (BUG-019); (5) `search_in_files` regex
   needles now compile with `Pattern.MULTILINE` so `^`/`$` anchors match per line (BUG-021). Patch
   bump (1.3.1) because it is fixes only. Same export-from-Eclipse + `gh release create` flow as
-  v1.0.0.
+  v1.0.0 (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.3.1).
 - [ ] (maybe) Automated release on tag push - a `.github/workflows/release.yml` that fires on
   `v*` tags and cuts the GitHub Release. The blocker is there is **no headless build**: a PDE
   plugin needs a Tycho/Maven build to produce the JAR in CI, which means authoring a `pom.xml`
