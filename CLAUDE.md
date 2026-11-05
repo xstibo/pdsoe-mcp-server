@@ -421,13 +421,14 @@ JavaSE-17`). Uses text blocks, sealed switch expressions, records, and pattern m
   needles now compile with `Pattern.MULTILINE` so `^`/`$` anchors match per line (BUG-021). Patch
   bump (1.3.1) because it is fixes only. Same export-from-Eclipse + `gh release create` flow as
   v1.0.0 (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.3.1).
-- [ ] Cut a `v1.3.2` GitHub Release (bugfixes only, verified live on PDSOE 12.8):
+- [x] Cut a `v1.3.2` GitHub Release (bugfixes only, verified live on PDSOE 12.8):
   (1) `build_file` bumps the source's disk mtime + refreshes before touch + incremental build,
   so a subclass of a changed super class really recompiles (no stale `.r`, no stale compiler
   markers) (BUG-022/014/018; the old editor-linter INFO-marker case of BUG-018 could not be
   reproduced); (2) `get_selection`/`get_cursor_position` work in the compare editor (BUG-023).
   Note: `build_file` on a base class does not rebuild all subclasses - build each one.
-  Same export-from-Eclipse + `gh release create` flow as v1.0.0.
+  Same export-from-Eclipse + `gh release create` flow as v1.0.0
+  (https://github.com/xstibo/pdsoe-mcp-server/releases/tag/v1.3.2).
 - [ ] (maybe) Automated release on tag push - a `.github/workflows/release.yml` that fires on
   `v*` tags and cuts the GitHub Release. The blocker is there is **no headless build**: a PDE
   plugin needs a Tycho/Maven build to produce the JAR in CI, which means authoring a `pom.xml`
