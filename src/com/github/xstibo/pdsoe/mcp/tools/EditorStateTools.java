@@ -5,6 +5,7 @@ import io.modelcontextprotocol.spec.McpSchema;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.jface.text.IDocument;
 import org.eclipse.jface.text.ITextSelection;
+import org.eclipse.jface.viewers.ISelectionProvider;
 import org.eclipse.swt.widgets.Display;
 import org.eclipse.ui.IEditorDescriptor;
 import org.eclipse.ui.IEditorInput;
@@ -81,22 +82,22 @@ public class EditorStateTools implements ToolProvider {
                     IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
                     if (window == null) { holder[0] = result("No active workbench window"); return; }
                     IEditorPart editor = window.getActivePage().getActiveEditor();
-                    if (!(editor instanceof ITextEditor te)) {
-                        holder[0] = result("Active editor is not a text editor");
-                        return;
-                    }
-                    Object sel = te.getSelectionProvider().getSelection();
-                    if (!(sel instanceof ITextSelection ts)) {
+                    if (editor == null) { holder[0] = result("No active editor"); return; }
+                    ITextSelection ts = textSelection(editor);
+                    if (ts == null || ts.getStartLine() < 0) {
                         holder[0] = result("No text selection available");
                         return;
                     }
                     int line = ts.getStartLine() + 1;
                     int col = -1;
-                    try {
-                        IDocument doc = te.getDocumentProvider().getDocument(te.getEditorInput());
-                        col = ts.getOffset() - doc.getLineOffset(ts.getStartLine()) + 1;
-                    } catch (Exception ignored) {}
-                    holder[0] = result("line: " + line + (col >= 0 ? ", column: " + col : ""));
+                    if (editor instanceof ITextEditor te) {
+                        try {
+                            IDocument doc = te.getDocumentProvider().getDocument(te.getEditorInput());
+                            col = ts.getOffset() - doc.getLineOffset(ts.getStartLine()) + 1;
+                        } catch (Exception ignored) {}
+                    }
+                    holder[0] = result("line: " + line + (col >= 0 ? ", column: " + col : "")
+                        + compareNote(editor));
                 } catch (Exception e) {
                     holder[0] = error(describe(e));
                 }
@@ -119,24 +120,42 @@ public class EditorStateTools implements ToolProvider {
                     IWorkbenchWindow window = PlatformUI.getWorkbench().getActiveWorkbenchWindow();
                     if (window == null) { holder[0] = result("No active workbench window"); return; }
                     IEditorPart editor = window.getActivePage().getActiveEditor();
-                    if (!(editor instanceof ITextEditor te)) {
-                        holder[0] = result("Active editor is not a text editor");
-                        return;
-                    }
-                    Object sel = te.getSelectionProvider().getSelection();
-                    if (!(sel instanceof ITextSelection ts) || ts.getLength() == 0) {
+                    if (editor == null) { holder[0] = result("No active editor"); return; }
+                    ITextSelection ts = textSelection(editor);
+                    if (ts == null || ts.getLength() == 0) {
                         holder[0] = result("No text selected");
                         return;
                     }
                     int startLine = ts.getStartLine() + 1;
                     int endLine = ts.getEndLine() + 1;
-                    holder[0] = result("start_line: " + startLine + "\nend_line: " + endLine + "\ntext:\n" + ts.getText());
+                    holder[0] = result("start_line: " + startLine + "\nend_line: " + endLine
+                        + compareNote(editor) + "\ntext:\n" + ts.getText());
                 } catch (Exception e) {
                     holder[0] = error(describe(e));
                 }
             });
             return Mono.just(holder[0]);
         });
+    }
+
+    /**
+     * Text selection of the active editor, or null. A plain ITextEditor is asked directly; any
+     * other editor (e.g. the Compare editor of the Synchronize view, which holds two SourceViewers
+     * in a CompareEditorInput and is no ITextEditor) is asked through its site's selection
+     * provider, which forwards the selection of the focused viewer (BUG-023).
+     */
+    private static ITextSelection textSelection(IEditorPart editor) {
+        ISelectionProvider sp = editor instanceof ITextEditor te
+            ? te.getSelectionProvider()
+            : editor.getSite().getSelectionProvider();
+        if (sp == null) return null;
+        return sp.getSelection() instanceof ITextSelection ts ? ts : null;
+    }
+
+    /** Tells the caller that lines refer to whichever compare side has focus, not necessarily the workspace file. */
+    private static String compareNote(IEditorPart editor) {
+        return editor instanceof ITextEditor ? ""
+            : "\nnote: compare editor - lines refer to the focused side of the comparison";
     }
 
     public AsyncToolSpecification listOpenEditorsTool() {

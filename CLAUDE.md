@@ -228,10 +228,15 @@ Durable findings (verified against PDSOE 12.8 on a large production ABL project)
 - **The ABL incremental builder skips files it considers unchanged, leaving stale state.** Two
   field failures: (1) stale error markers persisted on a file whose only problem had been a
   then-missing dependency that later built clean; (2) a dependent class kept compiling against
-  an interface's stale r-code after the interface was edited via the MCP edit tools. `build_file`
-  therefore calls `file.touch(monitor)` before the `INCREMENTAL_BUILD` so the requested file is
-  always in the build delta and really recompiles (regenerating its r-code). Keep the touch if
-  reworking the build tools.
+  an interface's stale r-code after the interface was edited via the MCP edit tools. **`touch()`
+  alone is not enough** (BUG-022): it only bumps Eclipse's modification stamp, while the ABL
+  builder compares the source's *on-disk mtime* against its `.r` and skips a source older than
+  its r-code - so a subclass whose super class changed kept a stale `.r` (runtime 13203/12882)
+  while `build_file` reported OK, and stale markers survived (BUG-014/BUG-018). `build_file` now
+  sets the disk mtime to now (`Files.setLastModifiedTime`), `refreshLocal(DEPTH_ZERO)`, then
+  `touch()`, then the `INCREMENTAL_BUILD` - the same sequence (utime + refresh + incremental
+  build) verified by hand in the field. Keep all three if reworking the build tools.
+  `build_project` (incl. full) still skips up-to-date sources; only `clean_project` forces all.
 - **OpenEdge surfaces an interface/impl mismatch in a super class only when a subclass is
   compiled.** A base class with the mismatch (e.g. accessor visibility: interface `GET. SET.`
   vs class `PUBLIC GET. PUBLIC SET.`) fails with error 12918 ("Could not compile '<Base>',

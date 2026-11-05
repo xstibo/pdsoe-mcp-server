@@ -4,6 +4,7 @@ import io.modelcontextprotocol.server.McpServerFeatures.AsyncToolSpecification;
 import io.modelcontextprotocol.spec.McpSchema;
 import org.eclipse.core.resources.IFile;
 import org.eclipse.core.resources.IProject;
+import org.eclipse.core.resources.IResource;
 import org.eclipse.core.resources.IncrementalProjectBuilder;
 import org.eclipse.core.resources.ResourcesPlugin;
 import org.eclipse.core.resources.WorkspaceJob;
@@ -30,6 +31,9 @@ import org.eclipse.ui.console.MessageConsole;
 import org.eclipse.ui.handlers.IHandlerService;
 import reactor.core.publisher.Mono;
 
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.attribute.FileTime;
 import java.util.List;
 import java.util.Map;
 
@@ -212,14 +216,22 @@ public class DiagnosticsTools implements ToolProvider {
                     @Override
                     public IStatus runInWorkspace(IProgressMonitor monitor) {
                         try {
-                            // Touch so the incremental builder cannot skip the file as
-                            // "unchanged". Without it, a file whose last compile failed only
-                            // because a dependency was missing keeps its stale error markers,
-                            // and a file edited outside the editor may keep stale r-code.
+                            // Force a real recompile. IFile.touch() alone only bumps Eclipse's
+                            // modification stamp: the file lands in the build delta, but the ABL
+                            // builder compares the source's on-disk mtime against its .r and skips
+                            // a source older than its r-code - even when a super class changed, so
+                            // the .r went stale and build_file still reported OK (BUG-022, also the
+                            // stale markers of BUG-014/BUG-018). Bump the disk mtime, refresh so
+                            // Eclipse sees it, then touch to be sure the file is in the delta.
+                            if (file.getLocation() != null) {
+                                Files.setLastModifiedTime(file.getLocation().toFile().toPath(),
+                                    FileTime.fromMillis(System.currentTimeMillis()));
+                                file.refreshLocal(IResource.DEPTH_ZERO, monitor);
+                            }
                             file.touch(monitor);
                             project.build(IncrementalProjectBuilder.INCREMENTAL_BUILD, ABL_BUILDER_ID, null, monitor);
                             sink.success(result("OK\n\n" + collectMarkers(file)));
-                        } catch (CoreException e) {
+                        } catch (CoreException | IOException e) {
                             sink.success(error("Build error: " + describe(e)));
                         }
                         return Status.OK_STATUS;
